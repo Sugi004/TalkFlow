@@ -5,6 +5,7 @@ backend/*.pyc
 backend/*.pyo
 backend/.env
 
+backend/routers/__pycache__/
 # Node
 frontend/node_modules/
 frontend/dist/
