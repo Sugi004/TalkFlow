@@ -60,6 +60,21 @@ class ConnectionManager:
         )
 
 manager = ConnectionManager()
+
+# Auth helper
+async def get_user_from_token(token: str, db: AsyncSession):
+    try:
+        payload = jwt.decode(token, os.getenv("SECRET_KEY"), algorithms=[os.getenv("ALGORITHM", "HS256")])
+        email = payload.get("sub")
+        if not email:
+            return None
+        result = await db.execute(select(User).where(User.email == email))
+        return result.scalar_one_or_none()
+    except JWTError:
+        return None
+
+#  Websocket endpoint
+
             
         
                     
