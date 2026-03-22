@@ -174,7 +174,7 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: int, token: 
                         conversation_id = conversation_id, 
                         sender_id = user.id,
                         content = content,
-                        message_type = msg_type,
+                        message_type = message_type,
                         file_url = file_url,
                         language = language,
                         expires_at = parsed_expires,
