@@ -1,7 +1,7 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlmodel import func, and_, or_, update
+from sqlalchemy import func, and_, or_, update
 from jose import jwt, JWTError
 from database import AsyncSessionLocal
 from redis_client import (
@@ -13,10 +13,10 @@ from redis_client import (
     increment_unread,
     cache_message
 )
-from models import User, Message, Participants, Conversation
+from models import User, Message, Participants, Conversation, MessageStatus
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 router = APIRouter(tags=["Websocket"])
@@ -74,9 +74,198 @@ async def get_user_from_token(token: str, db: AsyncSession):
         return None
 
 #  Websocket endpoint
+@router.websocket("/ws/{conversation_id}")
+async def websocket_endpoint(websocket: WebSocket, conversation_id: int, token: str = Query(...)):
+    async with AsyncSessionLocal() as db:
+        #  1. Authenticate
+        user = await get_user_from_token(token, db)
+        if not user:
+            await websocket.close(code=4001)
+            return
+        #  Check participant
+        part_result = await db.execute(
+            select(Participants).where(
+                and_(
+                    Participants.conversation_id == conversation_id,
+                    Participants.user_id == user.id
+                )
+            )
+        )
+        participant = part_result.scalar_one_or_none()
+        if not participant:
+            await websocket.close(code=4003)
+            return
+        #  Connect
+        await manager.connect(conversation_id, user.id, websocket)
+        #  Mark online
+        await set_user_online(user.id)
+        #  Send welcome
+        await websocket.send_json({
+            "type": "welcome",
+            "message": "Connected to chat",
+            "conversation_id": conversation_id,
+            "user_id": user.id
+        })
+        #  Mark message as delivered
+        unread_result = await db.execute(select(Message).where(Message.conversation_id == conversation_id, Message.sender_id != user.id, Message.status == MessageStatus.sent))
+        unread_messages = unread_result.scalars().all()
+        if unread_messages:
+            await set_bulk_message_status(conversation_id, [m.id for m in unread_messages], "delivered")
+            await db.execute(update(Message).where(and_(Message.conversation_id == conversation_id, Message.sender_id != user.id, Message.status == MessageStatus.sent)).values(status= MessageStatus.delivered))
+            await db.commit()
 
-            
-        
+        #  Notify other user is online 
+        await manager.broadcast(conversation_id, {"type": "presence","full_name": user.full_name, "user_id": user.id, "is_online": True})       
                     
-           
+        #  Subscribe to redis Pub/Sub
 
+        pubsub = redis_client.pubsub()
+        await pubsub.subscribe(f"chat:{conversation_id}")
+
+        try:
+            while True:
+                data = await websocket.receive_json()
+                msg_type = data.get("type")
+                if msg_type == "ping":
+                    await set_user_online(user.id)
+                    await websocket.send_json({"type": "pong"})
+                #  Typing indicator
+                elif msg_type == "typing":
+                    await redis_client.set(f"typing:{conversation_id}:{user.id}", "1", ex=3)
+                    await manager.broadcast(conversation_id, {"type": "typing..", "user_id": user.id, "full_name": user.full_name, "is_typing": data.get("is_typing", True)}, exclude_user_id=user.id)
+
+                #  Read receipts
+                elif msg_type == "read":
+                    await db.execute(update(Message).where(and_(Message.conversation_id == conversation_id, Message.sender_id != user.id, Message.status != MessageStatus.read)).values(status=MessageStatus.read))
+                    await db.commit()
+                    await manager.broadcast(conversation_id, {"type": "read", "conversation_id": conversation_id, "read_by": user.id, "read_by_name": user.full_name }, exclude_user_id=user.id)
+                #  Message sent
+                elif msg_type == "message":
+                    content = data.get("content")
+                    message_type = data.get("message_type", "text")
+                    file_url = data.get("file_url")
+                    language = data.get("language")
+                    expires_at = data.get("expires_at")
+                    temp_id = data.get("temp_id")
+                    
+                    #  validate
+                    if not content and not file_url:
+                        await websocket.send_json({"type": "error", "message": "Message must have content or file"})
+                        continue
+                    #  Rate limit - max 20 messages per 10 seconds
+                    rate_key = f"ws_rate:{user.id}"
+                    count = await redis_client.incr(rate_key)
+                    if count == 1:
+                        await redis_client.expire(rate_key, 10)
+                    if count > 20:
+                        await websocket.send_json({"type": "error", "message": "Limit exceeded - slow down!!"})
+                        continue
+                    
+                    #  Parse expired at
+                    parsed_expires = None
+                    if expires_at:
+                        try:
+                            parsed_expires = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+                        except ValueError:
+                            pass
+                    
+                    #  Save to DB
+                    new_message = Message(
+                        conversation_id = conversation_id, 
+                        sender_id = user.id,
+                        content = content,
+                        message_type = msg_type,
+                        file_url = file_url,
+                        language = language,
+                        expires_at = parsed_expires,
+                        status = MessageStatus.sent
+                    )
+                    db.add(new_message)
+                    await db.commit()
+                    await db.refresh(new_message)
+                    
+                    #  Update conversation updated_at
+                    conv_result = await db.execute(select(Conversation).where(Conversation.id == conversation_id))
+                    conversation = conv_result.scalar_one_or_none()
+                    if conversation:
+                        conversation.updated_at = datetime.now(timezone.utc)
+                        await db.commit()
+                        await db.refresh(new_message)
+
+                    #  Save status to redis
+                    await set_message_status(conversation_id, new_message.id, "sent")
+                    
+                    #     Cache message in redis
+                    await cache_message(conversation_id, {
+                        "id": new_message.id,
+                        "content": content,
+                        "sender_id": user.id,
+                        "created_at": new_message.created_at.isoformat(),
+
+                    })
+
+                    #  Increment unread for other participants
+                    parts_result = await db.execute(select(Participants).where(and_(Participants.conversation_id == conversation_id, Participants.user_id != user.id)))
+                    other_participants = parts_result.scalars().all()
+                    for p in other_participants:
+                        await increment_unread(p.user_id, conversation_id)
+
+                    #  Build payload
+                    payload = {
+                        "type": "message",
+                        "temp_id": temp_id,
+                        "id": new_message.id,
+                        "conversation_id": conversation_id,
+                        "content": content,
+                        "message_type": msg_type,
+                        "file_url": file_url,
+                        "language": language,
+                        "expires_at": expires_at,
+                        "is_deleted": False,
+                        "status": "sent",
+                        "created_at": new_message.created_at.isoformat(),
+                        "sender": {
+                            "id": user.id,
+                            "email": user.email,
+                            "full_name": user.full_name,
+                            "avatar_url": user.avatar_url,
+                        },
+                        "updated_at": new_message.updated_at.isoformat(),
+                    }
+                    #  Confirm to sender
+                    await websocket.send_json(payload)
+                    #  Broadcast to conversation
+                    await manager.broadcast(conversation_id, {
+                        **payload,
+                        "status": "delivered" if manager.is_online(conversation_id, user.id) else "sent"
+                    }, exclude_user_id=user.id)
+
+                    #  Publish to Redis pub/sub
+                    await redis_client.publish(f"chat:{conversation_id}", json.dumps(payload))
+    
+        except WebSocketDisconnect:
+            pass
+        finally:
+            #  Cleanup
+            manager.disconnect(conversation_id, user.id)
+            #  Update last seen
+            user.last_seen = datetime.now(timezone.utc)
+            await db.commit()
+            #  Remove online status from redis
+            await set_user_offline(user.id)
+
+            #  Notify other user went offline
+            await manager.broadcast(conversation_id, {
+                "type": "presence",
+                "user_id": user.id,
+                "is_online": False,
+                "last_seen": datetime.now(timezone.utc).isoformat()
+            })
+            #  Remove typing status
+            await redis_client.delete(f"typing:{conversation_id}:{user.id}")
+
+            #  Unsubscribe from Redis pub/sub
+            await pubsub.unsubscribe(f"chat:{conversation_id}")
+            await pubsub.close()
+
+ 
