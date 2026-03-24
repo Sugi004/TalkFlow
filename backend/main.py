@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 import os
 from database import engine
 from models import Base
-from routers import auth, conversation, messages, users, websocket, uploads
+from routers import auth, conversation, messages, users, websocket, uploads, ai
 from limiter import limiter
 # Load environment variables
 load_dotenv()
@@ -44,6 +44,7 @@ app.include_router(messages.router)
 app.include_router(users.router)
 app.include_router(websocket.router)
 app.include_router(uploads.router)
+app.include_router(ai.router)
 
 
 #  Create Tables on Startup

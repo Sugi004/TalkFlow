@@ -32,7 +32,8 @@ async def clear_typing(conversation_id: int, user_id: int):
 
 #  Message status
 async def set_message_status(conversation_id: int, message_id: int, status: str):
-    await redis_client.hset(f"message_status:{conversation_id}", str(message_id), status, ex=60)
+    await redis_client.hset(f"message_status:{conversation_id}", str(message_id), status)
+   
 
 async def get_message_status(conversation_id: int, message_id: int) -> str:
     status = await redis_client.hget(f"message_status:{conversation_id}", str(message_id))

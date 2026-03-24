@@ -6,12 +6,12 @@ from jose import jwt, JWTError
 from database import AsyncSessionLocal
 from redis_client import (
     redis_client,
-    set_user_online,
-    set_user_offline,
     set_message_status,
     set_bulk_message_status,
-    increment_unread,
-    cache_message
+    increment_unread_count,
+    cache_message,
+    set_online_status,
+    set_offline_status
 )
 from models import User, Message, Participants, Conversation, MessageStatus
 import json
@@ -98,7 +98,7 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: int, token: 
         #  Connect
         await manager.connect(conversation_id, user.id, websocket)
         #  Mark online
-        await set_user_online(user.id)
+        await set_online_status(user.id)
         #  Send welcome
         await websocket.send_json({
             "type": "welcome",
@@ -127,7 +127,7 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: int, token: 
                 data = await websocket.receive_json()
                 msg_type = data.get("type")
                 if msg_type == "ping":
-                    await set_user_online(user.id)
+                    await set_online_status(user.id)
                     await websocket.send_json({"type": "pong"})
                 #  Typing indicator
                 elif msg_type == "typing":
@@ -208,7 +208,7 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: int, token: 
                     parts_result = await db.execute(select(Participants).where(and_(Participants.conversation_id == conversation_id, Participants.user_id != user.id)))
                     other_participants = parts_result.scalars().all()
                     for p in other_participants:
-                        await increment_unread(p.user_id, conversation_id)
+                        await increment_unread_count(p.user_id, conversation_id)
 
                     #  Build payload
                     payload = {
@@ -252,7 +252,7 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: int, token: 
             user.last_seen = datetime.now(timezone.utc)
             await db.commit()
             #  Remove online status from redis
-            await set_user_offline(user.id)
+            await set_offline_status(user.id)
 
             #  Notify other user went offline
             await manager.broadcast(conversation_id, {

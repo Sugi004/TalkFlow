@@ -51,12 +51,13 @@ async def get_conversations(current_user: User = Depends(get_current_user), db: 
                 message_type=last_message.message_type,
                 content=last_message.content,
                 file_url=last_message.file_url,
+                status=last_message.status,
                 language=last_message.language,
                 expires_at=last_message.expires_at,
                 is_deleted=last_message.is_deleted,
                 created_at=last_message.created_at,
                 updated_at=last_message.updated_at,
-                sender=UserResponse(
+                sender=UserSearch(
                     id=sender.id,
                     email=sender.email,
                     full_name=sender.full_name,
@@ -226,13 +227,19 @@ async def get_conversation(conversation_id: int, current_user: User = Depends(ge
     # check if user is participant
     participant_result = await db.execute(select(Participants).where(and_(Participants.conversation_id == conversation.id, Participants.user_id == current_user.id)))
      
-    if not participant_result.scalar_one_or_none():
+    if not participant_result.scalars().first():
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a participant in this conversation")
     
     # load participants
-    participants_result = await db.execute(select(User).join(Participants).where(Participants.conversation_id == conversation.id))
-    participants = participants_result.scalars().all()
+    participant_result = await db.execute(select(Participants).where(Participants.conversation_id == conversation.id))
+    participant_rows = participant_result.scalars().all()
 
+    participants = []
+    for p in participant_rows:
+        user_result = await db.execute(select(User).where(User.id == p.user_id))
+        user = user_result.scalar_one_or_none()
+        if user:
+            participants.append(user)
     # Build response
     response = ConversationResponse(
         id=conversation.id,

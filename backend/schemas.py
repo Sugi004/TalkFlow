@@ -24,6 +24,7 @@ class UserSearch(BaseModel):
     id: int
     full_name: Optional[str] = None
     avatar_url: Optional[str] = None
+    email: str
 
     class Config:
         from_attributes = True
@@ -148,7 +149,7 @@ class WSTyping(BaseModel):
 #  Upload Schemas
 
 class PresignedUrlRequest(BaseModel):
-    filename: str
+    file_name: str
     content_type: str
     
 class PresignedUrlResponse(BaseModel):
@@ -171,9 +172,9 @@ class TranslateRequest(BaseModel):
 class TranslateResponse(BaseModel):
     translated: str
 
-class SuggestRepliesRequest(BaseModel):
+class SmartReplyRequest(BaseModel):
     conv_id:int
     last_message: str
 
-class SuggestRepliesResponse(BaseModel):
+class SmartReplyResponse(BaseModel):
     suggestions: List[str]

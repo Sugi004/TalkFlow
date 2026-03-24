@@ -137,6 +137,7 @@ async def send_message(conversation_id: int, message: MessageCreate, current_use
             email=current_user.email,
             full_name=current_user.full_name,
             avatar_url=current_user.avatar_url,
+
         )
     )
 
@@ -180,7 +181,7 @@ async def delete_message(message_id: int, current_user: User = Depends(get_curre
     )
 
 #  Get unread count
-@router.get("/{conversation_id}/unread", response_model=int)
+@router.get("/{conversation_id}/unread")
 async def get_unread_count_api(conversation_id: int, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
 
     #  Read unread count from redis
