@@ -159,7 +159,7 @@ class PresignedUrlResponse(BaseModel):
 #  AI Schemas
 
 class SummarizeRequest(BaseModel):
-    conv_id: int
+    conversation_id: int
     last_n_messages: int = 100
 
 class SummarizeResponse(BaseModel):
@@ -173,8 +173,7 @@ class TranslateResponse(BaseModel):
     translated: str
 
 class SmartReplyRequest(BaseModel):
-    conv_id:int
-    last_message: str
+    conversation_id:int
 
 class SmartReplyResponse(BaseModel):
     suggestions: List[str]
