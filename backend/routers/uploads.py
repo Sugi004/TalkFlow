@@ -22,12 +22,7 @@ s3_client = boto3.client(
 S3_BUCKET = os.getenv("S3_BUCKET")
 AWS_REGION = os.getenv("AWS_REGION")
 
-#  Get presigned upload URL
-@router.post("/presigned-url", response_model=PresignedUrlResponse)
-async def get_presigned_url(data: PresignedUrlRequest, current_user: User = Depends(get_current_user)):
-    #  Validate file type
-
-    allowed_types=[
+ALLOWED_TYPES=[
         "image/jpeg",
         "image/png",
         "image/webp",
@@ -37,17 +32,35 @@ async def get_presigned_url(data: PresignedUrlRequest, current_user: User = Depe
         "application/zip"
     ]
 
-    if data.content_type not in allowed_types:
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+
+#  Get presigned upload URL
+@router.post("/presigned-url", response_model=PresignedUrlResponse)
+async def get_presigned_url(data: PresignedUrlRequest, current_user: User = Depends(get_current_user)):
+    #  Validate file type
+    if data.content_type not in ALLOWED_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported file type. Allowed types {', '.join(allowed_types)}"
+            detail=f"Unsupported file type. Allowed types {', '.join(ALLOWED_TYPES)}"
         )
-    
+    if data.file_size > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File size exceeds the maximum limit of {MAX_FILE_SIZE / 1024 / 1024}MB"
+        )
     #  Generate unique key
     file_extension = data.file_name.split(".")[-1] if "." in data.file_name else ""
     unique_id = f"{uuid.uuid4()}.{file_extension}" if file_extension else str(uuid.uuid4())
     file_key = f"uploads/{current_user.id}/{unique_id}"
 
+    #  Get file extension
+    ext = data.file_name.split(".")[-1].lower()
+    allowed_ext = {"jpeg","jpg", "png", "webp", "gif", "pdf", "txt", "zip"}
+    if ext not in allowed_ext:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported file type. Allowed types {', '.join(allowed_ext)}"
+        )
     try:
         #  Generate presigned URL - valid for 5 minutes
         upload_url = s3_client.generate_presigned_url(

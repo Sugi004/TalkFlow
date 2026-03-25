@@ -8,9 +8,37 @@ import os
 from database import engine
 from models import Base
 from routers import auth, conversation, messages, users, websocket, uploads, ai
-from limiter import limiter
+from starlette.middleware.base import BaseHTTPMiddleware
 # Load environment variables
 load_dotenv()
+
+# Security Middleware
+
+class SecurityHeaderMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = "default-src 'self'"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+        response.headers["X-DNS-Prefetch-Control"] = "off"
+        response.headers["X-Download-Options"] = "noopen"
+        response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
+        response.headers["X-RateLimit-Limit"] = "100"
+        response.headers["X-RateLimit-Remaining"] = "99"
+        response.headers["X-RateLimit-Reset"] = "1234567890"
+        return response
+
+# Exception Handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc: Exception):
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "An unexpected error occured"},
+    )
+
 
 # App
 app = FastAPI(
@@ -32,8 +60,8 @@ app.add_middleware(
         "*"
     ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Include Routers
