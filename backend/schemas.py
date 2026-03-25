@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional, List
 from datetime import datetime
 from models import MessageType, MessageStatus
@@ -9,6 +9,35 @@ class UserCreate(BaseModel):
     password: str
     full_name: Optional[str] = None
     avatar_url: Optional[str] = None
+
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        if not v.endswith("@gmail.com", "@yahoo.com", "@outlook.com", "@hotmail.com", "@icloud.com", "@aol.com", "@protonmail.com", "@zoho.com", "@yandex.com", "@mail.com", "@in.com", "@rediffmail.com"):
+            raise ValueError("Please enter a valid email address")
+        return v
+
+    @field_validator('full_name')
+    @classmethod
+    def validate_full_name(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v.strip()) < 2:
+            raise ValueError("Full name must be at least 2 characters long")
+        return v
+    
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters long")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("Password must contain at least one number")
+        if not any(c.isupper() for c in v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not any(c.islower() for c in v):
+            raise ValueError("Password must contain at least one lowercase letter")
+        if not any(c in "!@#$%^&*()_+\-=\[\]{};'" for c in v):
+            raise ValueError("Password must contain at least one special character")
+        return v
 
 class UserLogin(BaseModel):
     email: EmailStr
