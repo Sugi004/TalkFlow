@@ -53,11 +53,12 @@ async def set_bulk_message_status(conversation_id: int, message_ids: list, statu
 async def cache_message(conversation_id: int, message_data: dict):
     import json
     await redis_client.rpush(f"conversation:{conversation_id}:messages", json.dumps(message_data))
-    await redis_client.expire(f"conversation:{conversation_id}:messages", 0, 49)
+    await redis_client.ltrim(f"conversation:{conversation_id}:messages", 0, 49)
+    await redis_client.expire(f"conversation:{conversation_id}:messages", 3600)
 
-async def get_cached_messages(conversation_id: int) -> List[dict]:
+async def get_cached_messages(conversation_id: int) -> list[dict]:
     import json
-    messages = await redis_client.lrange(f"conversation:{conversation_id}:messages", 0, 49)
+    messages = await redis_client.lrange(f"conversation:{conversation_id}:messages", -50, -1)
     return [json.loads(msg) for msg in messages]
     
 #  Unread count
