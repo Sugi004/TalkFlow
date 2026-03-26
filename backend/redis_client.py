@@ -42,7 +42,7 @@ async def get_message_status(conversation_id: int, message_id: int) -> str:
 async def get_all_message_status(conversation_id: int) -> dict:
     return await redis_client.hgetall(f"message_status:{conversation_id}")
 
-async def set_bulk_message_status(conversation_id: int, message_ids: List, status: str):
+async def set_bulk_message_status(conversation_id: int, message_ids: list, status: str):
     if not message_ids:
         return
     mapping = {str(msg_id): status for msg_id in message_ids}
