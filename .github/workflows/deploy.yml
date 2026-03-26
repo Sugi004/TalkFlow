@@ -1,0 +1,31 @@
+name: Deploy DevChat
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script: |
+            cd ~/DevChat
+            git pull origin main
+            docker rm -f devchat
+            docker build -t devchat-backend ./backend --no-cache
+            docker run -d \
+              --name devchat \
+              --env-file ./backend/.env \
+              -p 8001:8000 \
+              --restart always \
+              devchat-backend
+            docker logs devchat
