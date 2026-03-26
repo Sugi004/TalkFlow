@@ -1,0 +1,11 @@
+venv/
+__pycache__
+*.pyc
+*.pyo
+.env
+
+/routers/__pycache__
+/venv
+.git
+.gitignore
+.dockerignore
