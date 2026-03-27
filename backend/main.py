@@ -31,13 +31,7 @@ class SecurityHeaderMiddleware(BaseHTTPMiddleware):
         response.headers["X-RateLimit-Reset"] = "1234567890"
         return response
 
-# Exception Handler
-@app.exception_handler(Exception)
-async def global_exception_handler(request, exc: Exception):
-    return JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "An unexpected error occured"},
-    )
+
 
 
 # App
@@ -49,6 +43,7 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
 
 # CORS
 
@@ -74,6 +69,14 @@ app.include_router(websocket.router)
 app.include_router(uploads.router)
 app.include_router(ai.router)
 
+
+# Exception Handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc: Exception):
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "An unexpected error occured"},
+    )
 
 #  Create Tables on Startup
 
