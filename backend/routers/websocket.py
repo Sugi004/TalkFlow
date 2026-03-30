@@ -95,16 +95,32 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: int, token: 
         if not participant:
             await websocket.close(code=4003)
             return
+        conversation_result = await db.execute(select(Conversation).where(Conversation.id == conversation_id))
+        conversation = conversation_result.scalar_one_or_none()
+        
         #  Connect
         await manager.connect(conversation_id, user.id, websocket)
         #  Mark online
         await set_online_status(user.id)
+        if conversation.is_group:
+            await manager.broadcast(conversation_id, {"type": "user_joined",
+             "user_id": user.id,
+             "full_name": user.full_name,
+             "avatar_url": user.avatar_url,
+             "conversation_id": conversation_id,
+             "message": f"{user.full_name} joined the chat"}, exclude_user_id=user.id)
+        else:
+            await manager.broadcast(conversation_id, {
+            "type": "presence",
+            "full_name": user.full_name, 
+            "user_id": user.id, 
+            "is_online": True}, exclude_user_id=user.id)
         #  Send welcome
         await websocket.send_json({
-            "type": "welcome",
-            "message": "Connected to chat",
-            "conversation_id": conversation_id,
-            "user_id": user.id
+                "type": "welcome",
+                "message": "Connected to chat",
+                "conversation_id": conversation_id,
+                "user_id": user.id
         })
         #  Mark message as delivered
         unread_result = await db.execute(select(Message).where(Message.conversation_id == conversation_id, Message.sender_id != user.id, Message.status == MessageStatus.sent))
@@ -255,11 +271,21 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: int, token: 
             await set_offline_status(user.id)
 
             #  Notify other user went offline
-            await manager.broadcast(conversation_id, {
-                "type": "presence",
-                "user_id": user.id,
-                "is_online": False,
-                "last_seen": datetime.now(timezone.utc).isoformat()
+            if conversation.is_group:
+                await manager.broadcast(conversation_id, {
+                    "type": "user_left",
+                    "user_id": user.id,
+                    "full_name": user.full_name,
+                    "avatar_url": user.avatar_url,
+                    "conversation_id": conversation_id,
+                    "message": f"{user.full_name} left the chat"
+                }, exclude_user_id=user.id)
+            else:
+                await manager.broadcast(conversation_id, {
+                    "type": "presence",
+                    "user_id": user.id,
+                    "is_online": False,
+                    "last_seen": datetime.now(timezone.utc).isoformat()
             })
             #  Remove typing status
             await redis_client.delete(f"typing:{conversation_id}:{user.id}")
