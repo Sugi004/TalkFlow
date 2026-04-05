@@ -5,6 +5,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from dotenv import load_dotenv
 import os
+from fastapi.responses import JSONResponse
 from database import engine
 from models import Base
 from routers import auth, conversation, messages, users, websocket, uploads, ai
