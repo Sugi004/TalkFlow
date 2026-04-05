@@ -9,7 +9,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v0.1.10
         with:
@@ -32,3 +31,4 @@ jobs:
               --restart always \
               devchat-backend
             docker logs devchat
+            FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true
