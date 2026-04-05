@@ -1,0 +1,178 @@
+"use client"
+
+import { useEffect, useRef, useState, useCallback } from "react";
+import type { UseWebSocketOptions, WSMessage, WSOutgoing, MessageType, MessageStatus } from "@/types";
+
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws";
+
+
+export function useWebSocket({
+    conversation_id,
+    token,
+    onMessage,
+    onTyping,
+    onPresence,
+    onRead,
+    onUserJoined,
+    onUserLeft,
+    onPong,
+    onError,
+}: UseWebSocketOptions) {
+    const wsRef = useRef<WebSocket | null>(null);
+    const retryTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const retryCount = useRef(0);
+    const isMounted = useRef(true);
+    const [connected, setConnected] = useState(false);
+
+    const connect = useCallback(() => {
+        if(!conversation_id || !token || !isMounted.current) return;
+
+        const url = `${WS_URL}/ws/conversation_id=${conversation_id}?token=${token}`;
+        const ws = new WebSocket(url);
+        
+        ws.onopen = () => {
+            if (!isMounted.current) return;
+            setConnected(true);
+            retryCount.current = 0
+        };
+
+        ws.onmessage = (e) => {
+            if (!isMounted.current) return;
+            try {
+               const event: WSMessage = JSON.parse(e.data);
+               switch (event.type){
+                case "message":
+                    if (event.id && event.sender){
+                        onMessage(event);
+                    }
+                    break;
+                case "typing":
+                    if (event.user_id !== undefined && event.full_name !== undefined){
+                        onTyping(event.user_id, event.full_name, event.is_typing ?? false);
+                    }
+                    break;
+                case "presence":
+                    if(event.user_id !== undefined &&
+                        event.full_name !== undefined &&
+                        event.is_online !== undefined &&
+                        event.last_seen !== undefined 
+
+                    ){
+                        onPresence(event.user_id, event.full_name, event.is_online, event.last_seen);
+                    }
+                    break;
+                case "read":
+                    if(event.id !== undefined && event.user_id !== undefined){
+                        onRead(event.id, Number(event.user_id ?? 0));
+                    }
+                    break;
+                case "user_joined":
+                    if(event.user_id !== undefined && event.full_name !== undefined){
+                        onUserJoined(event.user_id, event.full_name)
+                    }
+                    break;
+                case  "user_left":
+                    if(event.user_id !== undefined && event.full_name !== undefined){
+                        onUserLeft(event.user_id, event.full_name)
+                    }
+                    break;
+                case "pong":
+                    onPong();
+                    break;
+                case "welcome":
+                    console.log("Connected to WebSocket server");
+                    break;
+                case "error":
+                    onError(event.content ?? "Unknown error");
+                    break;
+
+               }
+            } catch (err){
+                console.error("Failed to parse message:", err);
+            }
+        };
+
+        ws.onclose = (e) => {
+            if(!isMounted.current) return;
+            setConnected(false);
+            if(retryCount.current < 5){
+                retryCount.current++;
+                const delay = Math.min(1000 * Math.pow(2, retryCount.current - 1), 30000);
+                retryTimeout.current = setTimeout(() => {
+                    connect();
+                }, delay);
+            }
+        };
+
+        ws.onerror = () => ws.close();
+
+    }, [conversation_id, token]);
+
+
+    // Connect / reconnect whenever conversation_id or token changes
+
+    useEffect(() => {
+        isMounted.current = true;
+        if(retryTimeout.current) clearTimeout(retryTimeout.current);
+        wsRef.current?.close()
+        retryCount.current = 0;
+        connect();
+        return () => {
+            isMounted.current = false;
+            if(retryTimeout.current) clearTimeout(retryTimeout.current);
+            wsRef.current?.close();
+        };
+    }, [connect]);
+
+    // Heartbeat - keep connection alive through idle proxies
+
+    useEffect(()=>{
+        const interval = setInterval(()=>{
+            if(wsRef.current?.readyState === WebSocket.OPEN){
+                const ping: WSOutgoing = {type: "ping"};
+                wsRef.current.send(JSON.stringify(ping));
+            }
+        }, 25_000);
+        return () => clearInterval(interval);
+    }, []);
+
+    // Send message helpers
+
+    const sendMessage = useCallback((
+        content: string,
+        message_type: MessageType = "text",
+        extras: {file_url?: string; 
+            language?: string; expires_at?: string; temp_id?: string} = {}
+    ):boolean =>{
+        if(wsRef.current?.readyState !== WebSocket.OPEN) return false;
+
+        const frame: WSOutgoing = {
+            type: "message",
+            content,
+            message_type,
+            temp_id: extras.temp_id ?? crypto.randomUUID(),
+            ...extras,
+        };
+        wsRef.current.send(JSON.stringify(frame));
+        return true;
+    }, []);
+
+    const sendTyping = useCallback((is_typing: boolean) => {
+        if(wsRef.current?.readyState !== WebSocket.OPEN) return;
+        const frame: WSOutgoing = {type: "typing", is_typing}
+        wsRef.current.send(JSON.stringify(frame));
+    },[]);
+
+    const sendRead = useCallback(() => {
+        if(wsRef.current?.readyState !== WebSocket.OPEN) return;
+        const frame: WSOutgoing = {type: "read"}
+        wsRef.current.send(JSON.stringify(frame));
+    },[]);
+
+    return {connected, sendMessage, sendTyping, sendRead};
+        
+        
+
+}
+
+

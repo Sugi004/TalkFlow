@@ -73,3 +73,46 @@ export interface PresignedResponse{
     key: string;
 }
 
+export interface UseWebSocketOptions {
+    conversation_id: number | null;
+    token: string;
+    onMessage: (message: WSMessage) => void;
+    onTyping: (user_id: string | number, full_name: string, is_typing: boolean) => void;
+    onPresence: (user_id: string | number, full_name: string, is_online: boolean, last_seen: string) => void;
+    onRead: (message_id: string | number, read_by: number) => void;
+    onUserJoined: (user_id: string | number, full_name: string) => void;
+    onUserLeft: (user_id: string | number, full_name: string) => void;
+    onPong: () => void;
+    onError: (error: string) => void;
+}
+
+// Derived type aliases
+
+export type MessageType   = Message["message_type"];
+export type MessageStatus = Message["status"];
+export type WSEventType   = WSMessage["type"];
+
+// Websocket outgoing frames
+
+export interface WSOutgoing {
+    type: "message" | "typing" | "read" | "presence" | "ping";
+    message_type?: MessageType
+    content?: string;
+    temp_id?: string;
+    file_url?: string;
+    language?: string;
+    is_typing?: boolean;
+}
+
+export interface SummarizeResponse{
+    summary: string;
+}
+
+export interface SmartReplies{
+    replies: string[];
+}
+
+export interface TranslateResponse{
+    translated: string;
+}
+
