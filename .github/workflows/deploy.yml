@@ -18,8 +18,6 @@ jobs:
           port: 22
           script: |
             echo "Deploying DevChat backend..."
-            echo "Current directory: $(pwd)"
-            echo "Listing files: $(ls -la)"
             cd ~/DevChat
             git pull origin main
             docker rm -f devchat
