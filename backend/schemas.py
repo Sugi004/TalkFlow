@@ -2,6 +2,7 @@ from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional, List
 from datetime import datetime
 from models import MessageType, MessageStatus
+import re
 
 # Auth Schemas
 class UserCreate(BaseModel):
@@ -12,10 +13,10 @@ class UserCreate(BaseModel):
 
     @field_validator('email')
     @classmethod
-    def validate_email(cls, v: str) -> str:
-        if not v.endswith("@gmail.com", "@yahoo.com", "@outlook.com", "@hotmail.com", "@icloud.com", "@aol.com", "@protonmail.com", "@zoho.com", "@yandex.com", "@mail.com", "@in.com", "@rediffmail.com"):
-            raise ValueError("Please enter a valid email address")
-        return v
+    def validate_email(cls, v):
+        if not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", v):
+            raise ValueError("Invalid email address")
+        return v.lower()
 
     @field_validator('full_name')
     @classmethod
