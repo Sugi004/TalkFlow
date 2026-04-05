@@ -1,5 +1,5 @@
 export interface User {
-    id: string;
+    id: number;
     email: string;
     full_name: string;
     avatar_url: string;
@@ -8,7 +8,7 @@ export interface User {
 }
 
 export interface Conversation {
-    id: string;
+    id: number;
     is_group: boolean;
     group_name: string;
     group_avatar_url?: string;
@@ -22,8 +22,8 @@ export interface Conversation {
 }
 
 export interface Message {
-    id: string;
-    conversation_id: string;
+    id: number;
+    conversation_id: number;
     content?: string;
     message_type: "text" | "file" | "image" | "video" | "code";
     file_url?: string;
@@ -77,11 +77,11 @@ export interface UseWebSocketOptions {
     conversation_id: number | null;
     token: string;
     onMessage: (message: WSMessage) => void;
-    onTyping: (user_id: string | number, full_name: string, is_typing: boolean) => void;
-    onPresence: (user_id: string | number, full_name: string, is_online: boolean, last_seen: string) => void;
-    onRead: (message_id: string | number, read_by: number) => void;
-    onUserJoined: (user_id: string | number, full_name: string) => void;
-    onUserLeft: (user_id: string | number, full_name: string) => void;
+    onTyping: (user_id: number, full_name: string, is_typing: boolean) => void;
+    onPresence: (user_id: number, full_name: string, is_online: boolean, last_seen: string) => void;
+    onRead: (message_id: number, read_by: number) => void;
+    onUserJoined: (user_id: number, full_name: string) => void;
+    onUserLeft: (user_id: number, full_name: string) => void;
     onPong: () => void;
     onError: (error: string) => void;
 }

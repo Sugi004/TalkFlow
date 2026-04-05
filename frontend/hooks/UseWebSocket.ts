@@ -48,7 +48,7 @@ export function useWebSocket({
                     break;
                 case "typing":
                     if (event.user_id !== undefined && event.full_name !== undefined){
-                        onTyping(event.user_id, event.full_name, event.is_typing ?? false);
+                        onTyping(Number(event.user_id), event.full_name, event.is_typing ?? false);
                     }
                     break;
                 case "presence":
@@ -58,22 +58,22 @@ export function useWebSocket({
                         event.last_seen !== undefined 
 
                     ){
-                        onPresence(event.user_id, event.full_name, event.is_online, event.last_seen);
+                        onPresence(Number(event.user_id), event.full_name, event.is_online, event.last_seen);
                     }
                     break;
                 case "read":
                     if(event.id !== undefined && event.user_id !== undefined){
-                        onRead(event.id, Number(event.user_id ?? 0));
+                        onRead(Number(event.id), Number(event.user_id ?? 0));
                     }
                     break;
                 case "user_joined":
                     if(event.user_id !== undefined && event.full_name !== undefined){
-                        onUserJoined(event.user_id, event.full_name)
+                        onUserJoined(Number(event.user_id), event.full_name)
                     }
                     break;
                 case  "user_left":
                     if(event.user_id !== undefined && event.full_name !== undefined){
-                        onUserLeft(event.user_id, event.full_name)
+                        onUserLeft(Number(event.user_id), event.full_name)
                     }
                     break;
                 case "pong":
