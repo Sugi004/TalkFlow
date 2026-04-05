@@ -116,3 +116,28 @@ export interface TranslateResponse{
     translated: string;
 }
 
+export interface ChatListProps{
+    conversations: Conversation[];
+    loading: boolean;
+    activeId: number | null;
+    onSelect: (conversation: Conversation) => void;
+    onNewDirect: (userId: number) => void;
+    onNewGroup: (name: string, participantIds: number[]) => void;
+    onLeave: (conversationId: number) => void;
+    onSignOut: () => void;
+    
+}
+
+export interface ChatWindowProps{
+    conversation: Conversation | null;
+    messages: Message[];
+    loading: boolean;
+    onSendMessage: (content: string, messageType: MessageType, fileUrl?: string, language?: string) => void;
+    onDeleteMessage: (messageId: number) => void;
+    onMarkAsRead: (messageId: number) => void;
+    onTyping: (isTyping: boolean) => void;
+    onLeave: (conversationId: number) => void;
+    onAddParticipant: (conversationId: number, participantId: number) => void;
+    onSignOut: () => void;
+    
+}

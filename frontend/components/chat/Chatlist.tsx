@@ -3,6 +3,7 @@
 import { useState, useRef } from "react"
 import { Conversation, User } from "@/types"
 import { searchUsers } from "@/lib/users"
+import { ChatListProps } from "@/types"
 
 const AVATAR_PALETTES = [
     "bg-cyan-500/20 text-cyan-400",
@@ -71,3 +72,24 @@ function conversationAvatar(conv: Conversation) {
         </div>
     );
 }
+
+function NewChatModel({
+    onDirect,
+    onGroup,
+    onClose
+}: {
+    onDirect: (userId: number) => void;
+    onGroup: (name: string, ids: number[]) => void;
+    onClose: () => void;
+}) {
+    const [mode, setMode] = useState<"search" | "group">("search");
+    const [query, setQuery] = useState("");
+    const [results, setResults] = useState<User[]>([]);
+    const [selected, setSelected] = useState<Map<number, User>>(new Map());
+    const [groupName, setGroupName] = useState("");
+    const [searching, setSearching] = useState(false);
+    const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+
+}
+
