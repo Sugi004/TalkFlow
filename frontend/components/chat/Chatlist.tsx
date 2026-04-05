@@ -30,3 +30,44 @@ function timeAgo(iso: string) {
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
     return `${Math.floor(diff / 86400)}d ago`;
 }
+
+function lastMsgPreview(conv: Conversation): string {
+    const msg = conv.last_message
+    if (!msg) return "No Messages yet"
+    if (msg.is_deleted) return "Message deleted"
+    if (msg.message_type === "image") return "📷 Image"
+    if (msg.message_type === "file") return "📄 File"
+    if (msg.message_type === "code") return "💻 Code snippet"
+    if (msg.message_type === "video") return "🎥 Video"
+    return msg.content || ""
+}
+
+function conversationTitle(conv: Conversation) {
+    return conv.is_group ? conv.group_name : (conv.other_user?.full_name ?? "Unknown")
+}
+
+function conversationAvatar(conv: Conversation) {
+    const name = conversationTitle(conv);
+    const avatarUrl = conv.is_group ? conv.group_avatar_url : conv.other_user?.avatar_url;
+    if (avatarUrl) {
+        return (
+            <div className="relative shrink-0">
+                <img src={avatarUrl} alt={name} className="w-9 h-9 rounded object-cover" />
+                {!conv.is_group && conv.other_user?.is_online && (
+                    <span className="absolute -bottom-px -right-px w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-[#0a0e14]" />
+                )}
+            </div>
+        );
+
+    }
+    return (
+        <div className="relative shrink-0">
+            <div className={`w-9 h-9 rounded flex items-center justify-center text-[11px] font-bold font-mono ${getAvatarColor(name)}`}>
+                {conv.is_group ? "G" : getInitials(name)}
+            </div>
+            {!conv.is_group && conv.other_user?.is_online && (
+                <span className="absolute -bottom-px -right-px w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-[#0a0e14]" />
+            )}
+        </div>
+    );
+}
