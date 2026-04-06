@@ -143,3 +143,8 @@ export interface ChatWindowProps{
     onSignOut: () => void;
     
 }
+
+export interface CodeBlockProps {
+    code: string;
+    language?: string;
+}

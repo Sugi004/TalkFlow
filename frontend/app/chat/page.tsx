@@ -8,7 +8,7 @@ import { useConversations } from "@/hooks/UseConversations"
 import { getMe } from "@/lib/users"
 import { markAsRead } from "@/lib/messages"
 import Chatlist from "@/components/chat/Chatlist"
-import ChatWindow from "@/components/chat/ChatWindow"
+import CodeBlock from "@/components/chat/Codeblock"
 
 export default function ChatPage() {
     const router = useRouter();

@@ -364,8 +364,52 @@ export default function Chatlist({
                         })
                     )}
                 </div>
-
+                {/* User footer */}
+                {currentUser && (
+                    <div className="border-t border-[#1e2a35] px-3 py-2.5 flex items-center gap-2.5">
+                        <div className="relative shrink-0">
+                            {currentUser.avatar_url ? (
+                                <img src={currentUser.avatar_url} alt="" className="w-7 h-7 rounded object-cover" />
+                            ) : (
+                                <div className={`w-7 h-7 rounded flex items-center justify-center text-[10px] font-bold font-mono ${getAvatarColor(currentUser.full_name ?? currentUser.email)}`}>
+                                    {getInitials(currentUser.full_name ?? currentUser.email)}
+                                </div>
+                            )}
+                            <span className="absolute -bottom-px -right-px w-2 h-2 bg-emerald-400 rounded-full border-2 border-[#0a0e14]" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-[11.5px] text-[#c9d8e8] font-semibold font-mono truncate">
+                                {currentUser.full_name ?? currentUser.email}
+                            </p>
+                            <p className="text-[9.5px] text-emerald-400 font-mono">online</p>
+                        </div>
+                        <a
+                            href="/profile"
+                            className="w-6 h-6 flex items-center justify-center rounded text-[#4a6070] hover:text-cyan-400 hover:bg-[#1a2530] transition-colors text-xs"
+                            title="Profile"
+                        >
+                            ⚙
+                        </a>
+                        <button
+                            onClick={onSignOut}
+                            className="w-6 h-6 flex items-center justify-center rounded text-[#4a6070] hover:text-[#ff4d6d] hover:bg-[#1a2530] transition-colors text-xs"
+                            title="Sign out"
+                        >
+                            ⏻
+                        </button>
+                    </div>
+                )}
             </aside>
+
+            {showModal && (
+                <NewChatModel
+                    onDirect={onNewDirect}
+                    onGroup={onNewGroup}
+                    onClose={() => setShowModal(false)}
+                />
+            )}
+
+
         </>
     )
 }
