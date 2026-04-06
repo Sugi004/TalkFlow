@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { login } from "@/lib/auth";
+import { login, getErrorMessage } from "@/lib/auth";
 import { useAuth } from "@/context/AuthContext";
 import toast from "react-hot-toast";
 
@@ -59,10 +59,9 @@ export default function Login() {
             const data = await login(email, password);
             authLogin(data.access_token);
             router.push("/chat");
+
         } catch (error: any) {
-            toast.error(Array.isArray(error.response?.data?.detail)
-                ? error.response?.data?.detail.map((d: any) => d.msg).join(", ")
-                : error.response?.data?.detail || "Invalid email or password");
+            toast.error(getErrorMessage(error, "Invalid email or password"));
         } finally {
             setLoading(false);
         }
@@ -103,7 +102,7 @@ export default function Login() {
                     <span className="w-[11px] h-[11px] rounded-full bg-[#febc2e]" />
                     <span className="w-[11px] h-[11px] rounded-full bg-[#28c840]" />
                     <span className="mx-auto text-[11px] text-[#4a6070] tracking-widest font-mono">
-                        devchat — login.tsx
+                        Welcome to DevChat
                     </span>
                 </div>
 

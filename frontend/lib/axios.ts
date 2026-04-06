@@ -18,7 +18,8 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        if (error.response?.status === 401){
+        const isAuthRoute = window.location.pathname === "/login" || window.location.pathname === "/register";
+        if (error.response?.status === 401 && !isAuthRoute){
             if(typeof window !== "undefined"){
                 sessionStorage.removeItem("token");
                 window.location.href = "/login";

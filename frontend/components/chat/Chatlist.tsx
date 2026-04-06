@@ -47,7 +47,7 @@ function conversationTitle(conv: Conversation) {
     return conv.is_group ? conv.group_name : (conv.other_user?.full_name ?? "Unknown")
 }
 
-function conversationAvatar(conv: Conversation) {
+function ConvAvatar({ conv }: { conv: Conversation }) {
     const name = conversationTitle(conv);
     const avatarUrl = conv.is_group ? conv.group_avatar_url : conv.other_user?.avatar_url;
     if (avatarUrl) {
@@ -233,8 +233,141 @@ function NewChatModel({
             </div>
         </div>
     );
+}
 
+// Main component
 
+export default function Chatlist({
+    conversations,
+    activeId,
+    currentUser,
+    onSelect,
+    onLeave,
+    onNewDirect,
+    onNewGroup,
+    loading,
+    onSignOut
+}: ChatListProps) {
+    const [showModal, setShowModal] = useState(false);
+    const [menuConvId, setMenuConvId] = useState<number | null>(null);
+    const [filter, setFilter] = useState("");
+    const filtered = filter.trim()
+        ? conversations.filter((c) =>
+            conversationTitle(c).toLowerCase().includes(filter.toLowerCase())
+        )
+        : conversations;
+
+    return (
+        <>
+            <aside className="w-64 flex flex-col bg-[#0a0e14] border-r border-[#1e2a35] h-full shrink-0">
+
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3.5 border-b border-[#1e2a35]">
+                    <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 bg-cyan-400 rounded flex items-center justify-center text-[11px] font-bold text-[#080c10]">D</span>
+                        <span className="text-cyan-400 text-[11px] font-bold tracking-[.15em] uppercase font-mono">DevChat</span>
+                    </div>
+                    <button
+                        onClick={() => setShowModal(true)}
+                        className="w-7 h-7 flex items-center justify-center rounded text-[#4a6070] hover:text-cyan-400 hover:bg-[#1a2530] transition-colors text-lg leading-none"
+                        title="New conversation"
+                    >
+                        +
+                    </button>
+
+                </div>
+                {/* Search */}
+                <div className="px-3 py-2.5 border-b border-[#1e2a35]">
+                    <input
+                        type="text"
+                        placeholder="Search conversations…"
+                        value={filter}
+                        onChange={(e) => setFilter(e.target.value)}
+                        className="w-full bg-[#060a0e] border border-[#1e2a35] rounded px-2.5 py-1.5 font-mono text-[11.5px] text-[#c9d8e8] placeholder-[#364a58] outline-none focus:border-cyan-400/40 caret-cyan-400"
+                    />
+                </div>
+                {/* List */}
+                <div className="flex-1 overflow-y-auto py-1">
+                    {loading ? (
+                        <div className="flex items-center justify-center h-20 gap-2">
+                            <span className="w-4 h-4 border border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                            <span className="text-[11px] text-[#4a6070] font-mono">Loading…</span>
+                        </div>
+                    ) : filtered.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-32 text-center px-4">
+                            <p className="text-[12px] text-[#4a6070] font-mono">
+                                {filter ? "No results found" : "No conversations yet"}
+                            </p>
+                            {!filter && (
+                                <button onClick={() => setShowModal(true)} className="mt-2 text-[11px] text-cyan-400 font-mono hover:underline">
+                                    Start one →
+                                </button>
+                            )}
+                        </div>
+                    ) : (
+                        filtered.map((conv) => {
+                            const name = conversationTitle(conv);
+                            const preview = lastMsgPreview(conv);
+                            const ts = conv.last_message?.created_at ?? conv.created_at;
+                            const active = conv.id === activeId;
+                            const unread = conv.unread_count ?? 0;
+
+                            return (
+                                <div
+                                    key={conv.id}
+                                    className={`relative flex items-center gap-2.5 px-3 py-2.5 cursor-pointer transition-colors group
+                    ${active ? "bg-cyan-400/10" : "hover:bg-[#111820]"}`}
+                                    onClick={() => { onSelect(conv); setMenuConvId(null); }}
+                                >
+                                    <ConvAvatar conv={conv} />
+
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-baseline justify-between gap-1 mb-0.5">
+                                            <span className={`text-[13px] font-semibold font-mono truncate ${active ? "text-cyan-400" : "text-[#c9d8e8]"}`}>
+                                                {name}
+                                            </span>
+                                            <span className="text-[9.5px] text-[#3a4a55] font-mono shrink-0">{timeAgo(ts)}</span>
+                                        </div>
+                                        <p className={`text-[11.5px] font-mono truncate ${unread > 0 ? "text-[#c9d8e8] font-semibold" : "text-[#4a6070]"}`}>
+                                            {preview}
+                                        </p>
+                                    </div>
+
+                                    {/* Unread badge */}
+                                    {unread > 0 && (
+                                        <span className="bg-cyan-400 text-[#080c10] text-[9px] font-bold font-mono px-1.5 py-px rounded-full min-w-[18px] text-center shrink-0">
+                                            {unread > 99 ? "99+" : unread}
+                                        </span>
+                                    )}
+
+                                    {/* 3-dot menu */}
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); setMenuConvId(menuConvId === conv.id ? null : conv.id); }}
+                                        className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded text-[#4a6070] hover:text-[#c9d8e8] hover:bg-[#1e2a35] transition-all text-xs shrink-0"
+                                    >
+                                        ⋮
+                                    </button>
+
+                                    {/* Dropdown */}
+                                    {menuConvId === conv.id && (
+                                        <div className="absolute right-3 top-8 z-20 bg-[#0d1117] border border-[#1e2a35] rounded shadow-xl overflow-hidden">
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); onLeave(conv.id); setMenuConvId(null); }}
+                                                className="flex items-center gap-2 px-3 py-2 text-[12px] text-[#ff4d6d] font-mono hover:bg-[#1a2530] w-full text-left whitespace-nowrap"
+                                            >
+                                                Leave
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+
+            </aside>
+        </>
+    )
 }
 
 
