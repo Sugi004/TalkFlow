@@ -2,7 +2,7 @@ import api from "./axios";
 import type { Token } from "@/types";
 
 export const login = async (email: string, password: string) => {
-    const response = await api.post("/auth/token", {
+    const response = await api.post("/auth/login", {
         email,
         password,
     });

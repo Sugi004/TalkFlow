@@ -58,9 +58,11 @@ export default function Login() {
         try {
             const data = await login(email, password);
             authLogin(data.access_token);
-            router.push("/");
+            router.push("/chat");
         } catch (error: any) {
-            toast.error(error.response?.data?.detail || "Invalid email or password");
+            toast.error(Array.isArray(error.response?.data?.detail)
+                ? error.response?.data?.detail.map((d: any) => d.msg).join(", ")
+                : error.response?.data?.detail || "Invalid email or password");
         } finally {
             setLoading(false);
         }

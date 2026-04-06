@@ -109,7 +109,7 @@ export default function Register() {
             if (!res.ok) { setErrors({ general: data.detail ?? "Registration failed." }); return; }
             if (data.access_token) {
                 localStorage.setItem("access_token", data.access_token);
-                router.push("/chat");
+                router.push("/login");
             } else {
                 router.push("/login?registered=1");
             }

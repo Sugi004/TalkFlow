@@ -9,7 +9,7 @@ export default function Home() {
   const router = useRouter();
   useEffect(() => {
     if (isAuthenticated) {
-      router.push("/chat");
+      router.push("/conversations");
     } else {
       router.push("/login");
     }
