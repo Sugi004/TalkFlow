@@ -5,7 +5,7 @@ import { Conversation, User } from "@/types"
 import { searchUsers } from "@/lib/users"
 import { ChatListProps } from "@/types"
 
-const AVATAR_PALETTES = [
+export const AVATAR_PALETTES = [
     "bg-cyan-500/20 text-cyan-400",
     "bg-emerald-500/20 text-emerald-400",
     "bg-violet-500/20 text-violet-400",
@@ -14,7 +14,7 @@ const AVATAR_PALETTES = [
     "bg-sky-500/20 text-sky-400",
 ];
 
-function getAvatarColor(name: string): string {
+export const getAvatarColor = (name: string): string => {
     let h = 0;
     for (let c of name) h = (h * 31 + c.charCodeAt(0)) & 0xFFFFFF;
     return AVATAR_PALETTES[h % AVATAR_PALETTES.length];
