@@ -148,3 +148,12 @@ export interface CodeBlockProps {
     code: string;
     language?: string;
 }
+
+export interface MessageBubbleProps {
+    message: Message;
+    isOwn: boolean;
+    grouped?: boolean;
+    onDelete?: (id: number) => void;
+    onTranslate?: (id: number) => void;
+    translatedContent?: string;
+}
