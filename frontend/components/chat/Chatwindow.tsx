@@ -244,7 +244,7 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
     const [uploadProgress, setUploadProgress] = useState(0)
     const [showAiPanel, setShowAiPanel] = useState(false)
     const [typingUsers, setTypingUsers] = useState<{ id: number; name: string }[]>([])
-    const [translatedMap, settranslatedMap] = useState<Record<number, string>>({})
+    const [translatedMap, setTranslatedMap] = useState<Record<number, string>>({})
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const messagesTopRef = useRef<HTMLDivElement>(null)
     const fileRef = useRef<HTMLInputElement>(null)
@@ -275,6 +275,46 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
         }
     }
 
+    useEffect(() => {
+        if (!convId) return;
+        setMessages([])
+        setTypingUsers([])
+        setShowAiPanel(false)
+        setTranslatedMap({})
+        pageRef.current = 0
+        loadMessages(convId, true)
+    }, [convId])
+
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    }, [messages])
+
+    // Websocket callbacks
+    const handleMessages = useCallback((msg: Message) => {
+        setMessages((prev) => {
+            // replace optimistic if temp_id matches
+            if (msg.temp_id) {
+                const idx = prev.findIndex((m) => m.temp_id === msg.temp_id)
+                if (idx !== -1) {
+                    const updated = [...prev]
+                    updated[idx] = msg
+                    return updated
+                }
+            }
+            return [...prev, msg]
+        })
+        onIncomingMessage(msg)
+    }, [onIncomingMessage])
+
+    const handleTyping = useCallback((user_id: number, full_name: string, is_typing: boolean) => {
+        setTypingUsers((prev) =>
+            isTyping ? prev.find((u) => u.id === user_id) ? prev : [...prev, { id: user_id, name: full_name }] : prev.filter((u) => u.id !== user_id)
+        )
+    }, [])
+
+    const handleRead = useCallback((_convId: number, _readBy: number) => {
+        setMessages((prev) => prev.map((m) => (m.status === "delivered" ? { ...m, status: "read" } : m)))
+    }, [])
 
 
 
