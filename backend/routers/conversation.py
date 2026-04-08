@@ -162,12 +162,6 @@ async def create_group_conversation(data:GroupConversationCreate, current_user: 
     if len(data.participant_ids) < 2:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="At least 2 participants are required")
     
-    #  Check users exist
-    for user_id in data.participant_ids:
-        user_result = await db.execute(User).where(User.id == user_id)
-        if not user_result.scalar_one_or_none():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"User with id {user_id} not found")
-    
     #  Create conversation
     new_conversation = Conversation(
         is_group=True,
@@ -181,7 +175,7 @@ async def create_group_conversation(data:GroupConversationCreate, current_user: 
 #     Add user as participant and admin
     db.add(Participants(conversation_id=new_conversation.id, user_id=current_user.id, is_admin=True))
 
-    # Add other participants
+    # Add participants
     for user_id in data.participant_ids:
         user_result = await db.execute(select(User).where(User.id == user_id))
         if not user_result.scalar_one_or_none():
