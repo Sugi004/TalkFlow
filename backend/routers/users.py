@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from database import get_db
@@ -6,6 +6,7 @@ from models import User
 from schemas import UserResponse, UserSearch, UserUpdate
 from auth import get_current_user
 from limiter import limiter
+
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -29,10 +30,9 @@ async def update_me(user_update: UserUpdate, current_user: User = Depends(get_cu
 #  Search User
 
 @router.get("/search", response_model=list[UserSearch])
-async def search_users(search_query: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if len(search_query) < 2:
+async def search_users(q: str = Query(...), db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if len(q) < 2:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Search query must be at least 2 characters long")
-    result = await db.execute(select(User).where(User.full_name.ilike(f"%{search_query}%") | User.email.ilike(f"%{search_query}%")).where(User.id != current_user.id).limit(10))
+    result = await db.execute(select(User).where(User.full_name.ilike(f"%{q}%") | User.email.ilike(f"%{q}%")).where(User.id != current_user.id).limit(10))
     users = result.scalars().all()
     return users
-
