@@ -103,7 +103,7 @@ export default function Register() {
             const res = await fetch(process.env.NEXT_PUBLIC_API_URL + "/auth/register", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username: form.username.trim(), email: form.email.trim(), password: form.password }),
+                body: JSON.stringify({ full_name: form.username.trim(), email: form.email.trim(), password: form.password }),
             });
             const data = await res.json();
             if (!res.ok) { setErrors({ general: data.detail ?? "Registration failed." }); return; }

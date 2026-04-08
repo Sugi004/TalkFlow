@@ -32,7 +32,7 @@ export const uploadFile = async (file: File, onProgress?: (p: number) => void): 
     return file_url;
 }
 
-export const messageTypeFromMine = (mime: string): "image" | "video" | "file" => {
+export const messageTypeFromMime = (mime: string): "image" | "video" | "file" => {
     if (mime.startsWith("image/")) return "image";
     if (mime.startsWith("video/")) return "video";
     return "file";

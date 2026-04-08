@@ -114,6 +114,7 @@ function NewChatModel({
             s.find((x) => x.id === u.id)
                 ? s.filter((x) => x.id !== u.id)
                 : [...s, u]
+
         )
     }
 

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback, KeyboardEvent, ChangeEvent } from "react"
 import { Conversation, Message, User, ChatWindowProps } from "@/types"
 import { getMessages, deleteMessage, markAsRead } from "@/lib/messages"
-import { uploadFile, messageTypeFromMine } from "@/lib/uploads"
+import { uploadFile, messageTypeFromMime } from "@/lib/uploads"
 import { getSmartReply, summarizeConversation, translateMessage } from "@/lib/ai"
 import { useWebSocket } from "@/hooks/UseWebSocket"
 import MessageBubble from "./Messagebubble"
@@ -290,7 +290,7 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
     }, [messages])
 
     // Websocket callbacks
-    const handleMessages = useCallback((msg: Message) => {
+    const handleMessage = useCallback((msg: Message) => {
         setMessages((prev) => {
             // replace optimistic if temp_id matches
             if (msg.temp_id) {
@@ -316,7 +316,177 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
         setMessages((prev) => prev.map((m) => (m.status === "delivered" ? { ...m, status: "read" } : m)))
     }, [])
 
+    const handleUserJoined = useCallback((_uid: number, fullName: string) => {
+        const sys: Message = {
+            id: Date.now(),
+            conversation_id: convId!,
+            content: `${fullName} joined the chat`,
+            message_type: "text",
+            is_deleted: false,
+            status: "sent",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            sender: { id: 0, email: "system" }
+        } as unknown as Message
+        setMessages((prev) => [...prev, sys])
+    }, [convId])
 
+    const handleUserLeft = useCallback((_uid: number, fullName: string) => {
+        const sys: Message = {
+            id: Date.now() + 1,
+            conversation_id: convId!,
+            content: `${fullName} left the chat`,
+            message_type: "text",
+            is_deleted: false,
+            status: "sent",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            sender: { id: 0, email: "system" }
+        } as unknown as Message
+        setMessages((prev) => [...prev, sys])
+    }, [convId])
+
+    const { connected, sendMessage, sendTyping, sendRead } = useWebSocket({
+        conversation_id: convId,
+        token: token!,
+        onMessage: handleMessage,
+        onTyping: handleTyping,
+        onRead: handleRead,
+        onPresence,
+        onUserJoined: handleUserJoined,
+        onUserLeft: handleUserLeft,
+        onPong: () => { },
+        onError: (error: string) => { },
+    });
+
+    // Mark as read when window is focused
+    useEffect(() => {
+        if (convId && connected) sendRead()
+    }, [convId, connected]);
+
+    // Send text
+
+    async function handleSend() {
+        const content = input.trim();
+        if (!content || !convId) return;
+        setinput("");
+
+        //Auto-resize textarea back
+        if (textareaRef.current) textareaRef.current.style.height = "auto";
+
+        const tempId = crypto.randomUUID()
+        const isCode = content.startsWith("```")
+        const lang = isCode ? content.split("\n")[0].replace("```", "").trim() : undefined;
+        const codeContent = isCode ? content.replace(/^```\w*\n/, "").replace(/```$/, "").trim() : content;
+        const optimistic: Message = {
+            id: Date.now() as unknown as number,
+            conversation_id: convId,
+            content: codeContent,
+            message_type: isCode ? "code" : "text",
+            language: isCode ? lang : undefined,
+            is_deleted: false,
+            status: "sent",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            sender: currentUser as unknown as Message["sender"]
+        }
+        setMessages((prev) => [...prev, optimistic])
+        sendMessage(codeContent, isCode ? "code" : "text", { temp_id: tempId, language: lang })
+
+        //Stop typing
+        if (typingTimer.current) clearTimeout(typingTimer.current)
+        sendTyping(false)
+        isTyping.current = false
+
+        // Typing debounce
+        function handleInputChange(e: ChangeEvent<HTMLTextAreaElement>) {
+            setinput(e.target.value)
+            // Auto resize
+            e.target.style.height = "auto"
+            e.target.style.height = Math.min(e.target.scrollHeight, 144) + "px"
+
+            if (!isTyping.current) {
+                isTyping.current = true
+                sendTyping(true)
+            }
+            if (typingTimer.current) clearTimeout(typingTimer.current)
+            typingTimer.current = setTimeout(() => {
+                isTyping.current = false
+                sendTyping(false)
+            }, 2000)
+        }
+
+        function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault()
+                handleSend()
+            }
+        }
+
+        // File upload
+        async function handleFileUpload(e: ChangeEvent<HTMLInputElement>) {
+            const file = e.target.files?.[0]
+            if (!file || !convId) return
+
+            setUploading(true)
+            setUploadProgress(0)
+
+            try {
+                const url = await uploadFile(file, setUploadProgress);
+                const type = messageTypeFromMime(file.type);
+                sendMessage(file.name, type, { file_url: url })
+            }
+            catch { }
+            finally {
+                setUploading(false)
+                setUploadProgress(0)
+                e.target.value = ""
+            }
+        }
+
+        // Delete / translate
+
+        async function handleDelete(msgId: number) {
+            try {
+                await deleteMessage(msgId)
+                setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, is_deleted: true } : m))
+            }
+            catch { }
+        }
+
+        async function handleTranslate(msgId: number) {
+            const msg = messages.find((m) => m.id === msgId)
+            if (!msg?.content) return
+
+            try {
+                const translated = await translateMessage(msg.content, "English")
+                setTranslatedMap((prev) => ({ ...prev, [msgId]: translated }))
+            }
+            catch { }
+        }
+
+        // Load more (scroll to top)
+        async function handleLoadMore() {
+            if (!convId || loadingMsgs || !hasMore) return;
+            const prevHeight = messagesTopRef.current?.parentElement?.scrollHeight ?? 0;
+            await loadMessages(convId)
+
+            // Restore scroll position
+            const el = messagesTopRef.current?.parentElement;
+            if (el) {
+                el.scrollTop = el.scrollHeight - prevHeight;
+            }
+        }
+
+    }
+
+    return (
+        <>
+            <div className="flex-1 flex flex-col bg-[#080c10] border-l border-[#1e2a35] min-w-0">
+                ChatWindow
+            </div>
+        </>
+    )
 
 
 

@@ -12,12 +12,12 @@ export const getConversation = async (id: number): Promise<Conversation> => {
 };
 
 export const createDirectConversation = async (user_id: number): Promise<Conversation> => {
-    const {data} = await api.post("/conversations/direct", {user_id: user_id});
+    const {data} = await api.post("/conversations/direct", {participant_id: user_id});
     return data;
 }
 
-export const createGroupConversation = async (name: string, participants: number[]) => {
-    const {data} = await api.post("/conversations/group", {group_name: name, participants_ids: participants});
+export const createGroupConversation = async (name: string, participants: number[], avatar_url: string) => {
+    const {data} = await api.post("/conversations/group", {group_name: name,group_avatar_url: avatar_url, participant_ids: participants});
     return data;
 }
 

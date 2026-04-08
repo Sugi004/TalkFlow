@@ -75,8 +75,8 @@ export interface PresignedResponse{
 
 export interface UseWebSocketOptions {
     conversation_id: number | null;
-    token: string;
-    onMessage: (message: WSMessage) => void;
+    token: string | null;
+    onMessage: (message: Message) => void;
     onTyping: (user_id: number, full_name: string, is_typing: boolean) => void;
     onPresence: (user_id: number, full_name: string, is_online: boolean, last_seen: string) => void;
     onRead: (message_id: number, read_by: number) => void;
@@ -132,15 +132,10 @@ export interface ChatListProps{
 
 export interface ChatWindowProps{
     conversation: Conversation | null;
-    messages: Message[];
-    loading: boolean;
-    onSendMessage: (content: string, messageType: MessageType, fileUrl?: string, language?: string) => void;
-    onDeleteMessage: (messageId: number) => void;
-    onMarkAsRead: (messageId: number) => void;
-    onTyping: (isTyping: boolean) => void;
-    onLeave: (conversationId: number) => void;
-    onAddParticipant: (conversationId: number, participantId: number) => void;
-    onSignOut: () => void;
+    currentUser: User | null;
+    token: string | null;
+    onPresence:(userId: number, fullName: string, isOnline: boolean, lastSeen: string) => void;
+    onIncomingMessage:(message: Message) => void;
     
 }
 

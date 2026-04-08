@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { UseWebSocketOptions, WSMessage, WSOutgoing, MessageType, MessageStatus } from "@/types";
+import type { UseWebSocketOptions, WSMessage, WSOutgoing, MessageType, MessageStatus, Message } from "@/types";
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws";
 
@@ -16,7 +16,7 @@ export function useWebSocket({
     onUserJoined,
     onUserLeft,
     onPong,
-    onError,
+    onError
 }: UseWebSocketOptions) {
     const wsRef = useRef<WebSocket | null>(null);
     const retryTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -43,7 +43,7 @@ export function useWebSocket({
                switch (event.type){
                 case "message":
                     if (event.id && event.sender){
-                        onMessage(event);
+                        onMessage(event as unknown as Message);
                     }
                     break;
                 case "typing":
