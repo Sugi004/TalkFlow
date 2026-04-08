@@ -175,7 +175,7 @@ async def create_group_conversation(data:GroupConversationCreate, current_user: 
 #     Add user as participant and admin
     db.add(Participants(conversation_id=new_conversation.id, user_id=current_user.id, is_admin=True))
 
-    # Add participants
+    # Add other participants
     for user_id in data.participant_ids:
         user_result = await db.execute(select(User).where(User.id == user_id))
         if not user_result.scalar_one_or_none():
