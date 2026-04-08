@@ -24,8 +24,9 @@ jobs:
             docker build -t devchat-backend ./backend --no-cache
             docker run -d \
               --name devchat \
-              --env-file ./backend/.env \
+              --link devchat-redis:redis \
               -p 8001:8000 \
+              --env-file ./backend/.env \
               --restart always \
               devchat-backend
             docker logs devchat
