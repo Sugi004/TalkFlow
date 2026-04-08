@@ -120,7 +120,7 @@ export interface ChatListProps{
     conversations: Conversation[];
     loading: boolean;
     activeId: number | null;
-    currentUser: User;
+    currentUser: User | null;
     onSelect: (conversation: Conversation) => void;
     onNewDirect: (userId: number) => void;
     onNewGroup: (name: string, participantIds: number[]) => void;
