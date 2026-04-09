@@ -32,12 +32,17 @@ function convDisplayAvatar(conv: Conversation) {
 }
 
 // Group: same sender + same type + within 3 min
-function buildGroups(messages: Message[]) {
-    return messages.map((m, i) => {
-        const prev = messages[i - 1];
-        const grouped = !!prev && prev.sender?.id === m.sender?.id
-            && m.message_type === "text" && !m.is_deleted && new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() < 180000
-        return { ...m, grouped }
+function buildGroups(msgs: Message[]) {
+    if (!Array.isArray(msgs)) return [];
+    return msgs.map((m, i) => {
+        const prev = msgs[i - 1];
+        const grouped =
+            !!prev &&
+            prev.sender?.id === m.sender?.id &&
+            m.message_type === "text" &&
+            !m.is_deleted &&
+            new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() < 180_000;
+        return { ...m, grouped };
     });
 }
 
@@ -397,99 +402,154 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
         if (typingTimer.current) clearTimeout(typingTimer.current)
         sendTyping(false)
         isTyping.current = false
+    }
+    // Typing debounce
+    function handleInputChange(e: ChangeEvent<HTMLTextAreaElement>) {
+        setinput(e.target.value)
+        // Auto resize
+        e.target.style.height = "auto"
+        e.target.style.height = Math.min(e.target.scrollHeight, 144) + "px"
 
-        // Typing debounce
-        function handleInputChange(e: ChangeEvent<HTMLTextAreaElement>) {
-            setinput(e.target.value)
-            // Auto resize
-            e.target.style.height = "auto"
-            e.target.style.height = Math.min(e.target.scrollHeight, 144) + "px"
-
-            if (!isTyping.current) {
-                isTyping.current = true
-                sendTyping(true)
-            }
-            if (typingTimer.current) clearTimeout(typingTimer.current)
-            typingTimer.current = setTimeout(() => {
-                isTyping.current = false
-                sendTyping(false)
-            }, 2000)
+        if (!isTyping.current) {
+            isTyping.current = true
+            sendTyping(true)
         }
-
-        function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-            if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault()
-                handleSend()
-            }
-        }
-
-        // File upload
-        async function handleFileUpload(e: ChangeEvent<HTMLInputElement>) {
-            const file = e.target.files?.[0]
-            if (!file || !convId) return
-
-            setUploading(true)
-            setUploadProgress(0)
-
-            try {
-                const url = await uploadFile(file, setUploadProgress);
-                const type = messageTypeFromMime(file.type);
-                sendMessage(file.name, type, { file_url: url })
-            }
-            catch { }
-            finally {
-                setUploading(false)
-                setUploadProgress(0)
-                e.target.value = ""
-            }
-        }
-
-        // Delete / translate
-
-        async function handleDelete(msgId: number) {
-            try {
-                await deleteMessage(msgId)
-                setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, is_deleted: true } : m))
-            }
-            catch { }
-        }
-
-        async function handleTranslate(msgId: number) {
-            const msg = messages.find((m) => m.id === msgId)
-            if (!msg?.content) return
-
-            try {
-                const translated = await translateMessage(msg.content, "English")
-                setTranslatedMap((prev) => ({ ...prev, [msgId]: translated }))
-            }
-            catch { }
-        }
-
-        // Load more (scroll to top)
-        async function handleLoadMore() {
-            if (!convId || loadingMsgs || !hasMore) return;
-            const prevHeight = messagesTopRef.current?.parentElement?.scrollHeight ?? 0;
-            await loadMessages(convId)
-
-            // Restore scroll position
-            const el = messagesTopRef.current?.parentElement;
-            if (el) {
-                el.scrollTop = el.scrollHeight - prevHeight;
-            }
-        }
-
+        if (typingTimer.current) clearTimeout(typingTimer.current)
+        typingTimer.current = setTimeout(() => {
+            isTyping.current = false
+            sendTyping(false)
+        }, 2000)
     }
 
+    function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault()
+            handleSend()
+        }
+    }
+
+    // File upload
+    async function handleFileUpload(e: ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0]
+        if (!file || !convId) return
+
+        setUploading(true)
+        setUploadProgress(0)
+
+        try {
+            const url = await uploadFile(file, setUploadProgress);
+            const type = messageTypeFromMime(file.type);
+            sendMessage(file.name, type, { file_url: url })
+        }
+        catch { }
+        finally {
+            setUploading(false)
+            setUploadProgress(0)
+            e.target.value = ""
+        }
+    }
+
+    // Delete / translate
+
+    async function handleDelete(msgId: number) {
+        try {
+            await deleteMessage(msgId)
+            setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, is_deleted: true } : m))
+        }
+        catch { }
+    }
+
+    async function handleTranslate(msgId: number) {
+        const msg = messages.find((m) => m.id === msgId)
+        if (!msg?.content) return
+
+        try {
+            const translated = await translateMessage(msg.content, "English")
+            setTranslatedMap((prev) => ({ ...prev, [msgId]: translated }))
+        }
+        catch { }
+    }
+
+    // Load more (scroll to top)
+    async function handleLoadMore() {
+        if (!convId || loadingMsgs || !hasMore) return;
+        const prevHeight = messagesTopRef.current?.parentElement?.scrollHeight ?? 0;
+        await loadMessages(convId)
+
+        // Restore scroll position
+        const el = messagesTopRef.current?.parentElement;
+        if (el) {
+            el.scrollTop = el.scrollHeight - prevHeight;
+        }
+    }
+
+    // Derived
+    const grouped = buildGroups(Array.isArray(messages) ? messages : [])
+    const withDivs = injectDividers(grouped)
+    const otherTyping = typingUsers.filter((u) => u.id !== currentUser?.id).map((u) => u.name)
+    const isCodeBlock = input.trimStart().startsWith("```")
+
+    if (!conversation) {
+        return (
+            <div className="flex-1 flex items-center justify-center bg-[#080c10]">
+                <div className="text-center">
+                    <div className="text-5xl mb-4">💬</div>
+                    <p className="text-[15px] text-[#c9d8e8] font-semibold font-mono mb-1">Select a conversation</p>
+                    <p className="text-[12px] text-[#4a6070] font-mono">Choose from the list or start a new one</p>
+                </div>
+            </div>
+        );
+
+    }
     return (
         <>
-            <div className="flex-1 flex flex-col bg-[#080c10] border-l border-[#1e2a35] min-w-0">
-                ChatWindow
+            <div className="flex-1 flex flex-col min-w-0 bg-[#080c10]">
+                {/* Header */}
+                <header className="flex items-center gap-3 px-5 py-3 border-b border-[#1e2a35] bg-[#0d1117] shrink-0">
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-[14px] font-bold text-[#c9d8e8] font-mono truncate">
+                                {convDisplayName(conversation)}
+                            </h1>
+                            {!conversation.is_group && conversation.other_user?.is_online && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                            )}
+                            {conversation.is_group && (
+                                <span className="text-[10px] text-[#4a6070] font-mono">
+                                    {conversation.participants?.length ?? 0} members
+                                </span>
+                            )}
+                        </div>
+                        {!conversation.is_group && conversation.other_user && (
+                            <p className="text-[11px] font-mono text-[#4a6070]">
+                                {conversation.other_user.is_online
+                                    ? "online"
+                                    : conversation.other_user.last_seen
+                                        ? `last seen ${new Date(conversation.other_user.last_seen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                                        : "offline"}
+                            </p>
+                        )}
+                    </div>
+                    {/* Connection dot */}
+                    <div
+                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${connected ? "bg-emerald-400" : "bg-[#ff4d6d] animate-pulse"}`}
+                        title={connected ? "Connected" : "Reconnecting…"}
+                    />
+
+                    {/* AI button */}
+                    <button
+                        onClick={() => setShowAiPanel((v) => !v)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono font-semibold transition-all
+            ${showAiPanel ? "bg-violet-500/20 text-violet-400 border border-violet-500/30" : "text-[#4a6070] hover:text-violet-400 hover:bg-violet-500/10 border border-transparent"}`}
+                        title="Gemini AI features"
+                    >
+                        <span>✦</span> AI
+                    </button>
+                </header>
             </div>
         </>
     )
 
-
-
-
-
 }
+
+
