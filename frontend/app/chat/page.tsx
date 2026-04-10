@@ -17,6 +17,8 @@ export default function ChatPage() {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [activeConv, setActiveConv] = useState<Conversation | null>(null);
     const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [showLeaveModal, setShowLeaveModal] = useState(false);
+    const [pendingLeave, setPendingLeave] = useState(false);
 
     const {
         conversations,
@@ -47,6 +49,25 @@ export default function ChatPage() {
                 );
         }
     }, [isAuthenticated]);
+
+    // Protect accidental closure
+    useEffect(() => {
+        const handlePopState = (e: PopStateEvent) => {
+            window.history.pushState(null, "", window.location.href);
+            setShowLeaveModal(true);
+            setPendingLeave(true);
+        };
+        window.history.pushState(null, "", window.location.href);
+        window.addEventListener("popstate", handlePopState);
+        return () => window.removeEventListener("popstate", handlePopState);
+    }, []);
+
+    const handleConfirmLeave = () => {
+        setShowLeaveModal(false);
+        setPendingLeave(false);
+        window.removeEventListener("popstate", () => { });
+        router.push("/login");
+    };
 
     // Select conversation
 
@@ -123,6 +144,30 @@ export default function ChatPage() {
                     onIncomingMessage={(msg: any) => handleIncomingMessage(msg, activeConv?.id ?? null)}
                     onPresence={updatePresence}
                 />
+                {showLeaveModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                        <div className="bg-[#0d1117] border border-[#1e2a35] rounded-lg p-6 w-80 shadow-2xl">
+                            <h2 className="text-[14px] font-bold text-[#c9d8e8] font-mono mb-2">Leave DevChat?</h2>
+                            <p className="text-[12px] text-[#4a6070] font-mono mb-6">
+                                You may miss incoming messages while you're away.
+                            </p>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowLeaveModal(false)}
+                                    className="flex-1 py-2 rounded border border-[#1e2a35] text-[12px] font-mono text-[#c9d8e8] hover:bg-[#1a2530] transition-colors"
+                                >
+                                    Stay
+                                </button>
+                                <button
+                                    onClick={handleConfirmLeave}
+                                    className="flex-1 py-2 rounded bg-[#ff4d6d]/20 border border-[#ff4d6d]/30 text-[12px] font-mono text-[#ff4d6d] hover:bg-[#ff4d6d]/30 transition-colors"
+                                >
+                                    Leave
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <style>{`
         ::-webkit-scrollbar { width: 4px }

@@ -22,12 +22,12 @@ function formatDate(iso: string) {
 
 
 function convDisplayName(conv: Conversation) {
-    return conv.is_group ? (conv.group_name ?? "Group") : (conv.other_user?.full_name ?? conv.other_user?.email ?? "Unknown");
+    return conv.is_group ? (conv.group_name ?? "Group") : (conv.participants[1]?.full_name ?? conv.participants[1]?.email ?? "Unknown");
 }
 
 function convDisplayAvatar(conv: Conversation) {
     if (conv.is_group && conv.group_avatar_url) return conv.group_avatar_url;
-    if (!conv.is_group && conv.other_user?.avatar_url) return conv.other_user.avatar_url;
+    if (!conv.is_group && conv.participants[1]?.avatar_url) return conv.participants[1].avatar_url;
     return null;
 }
 
@@ -511,7 +511,7 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
                             <h1 className="text-[14px] font-bold text-[#c9d8e8] font-mono truncate">
                                 {convDisplayName(conversation)}
                             </h1>
-                            {!conversation.is_group && conversation.other_user?.is_online && (
+                            {!conversation.is_group && conversation.participants[1]?.is_online && (
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
                             )}
                             {conversation.is_group && (
@@ -520,12 +520,12 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
                                 </span>
                             )}
                         </div>
-                        {!conversation.is_group && conversation.other_user && (
+                        {!conversation.is_group && conversation.participants[1] && (
                             <p className="text-[11px] font-mono text-[#4a6070]">
-                                {conversation.other_user.is_online
+                                {conversation.participants[1].is_online
                                     ? "online"
-                                    : conversation.other_user.last_seen
-                                        ? `last seen ${new Date(conversation.other_user.last_seen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                                    : conversation.participants[1].last_seen
+                                        ? `last seen ${new Date(conversation.participants[1].last_seen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
                                         : "offline"}
                             </p>
                         )}

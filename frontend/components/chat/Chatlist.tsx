@@ -5,6 +5,7 @@ import { Conversation, User } from "@/types"
 import { searchUsers } from "@/lib/users"
 import { ChatListProps } from "@/types"
 
+
 export const AVATAR_PALETTES = [
     "bg-cyan-500/20 text-cyan-400",
     "bg-emerald-500/20 text-emerald-400",
@@ -18,6 +19,11 @@ export const getAvatarColor = (name: string): string => {
     let h = 0;
     for (let c of name) h = (h * 31 + c.charCodeAt(0)) & 0xFFFFFF;
     return AVATAR_PALETTES[h % AVATAR_PALETTES.length];
+}
+
+function validAvatar(url?: string | null): string | null {
+    if (!url) return null;
+    try { new URL(url); return url; } catch { return null; }
 }
 
 function getInitials(name: string): string {
@@ -44,17 +50,21 @@ function lastMsgPreview(conv: Conversation): string {
 }
 
 function conversationTitle(conv: Conversation) {
-    return conv.is_group ? conv.group_name : (conv.other_user?.full_name ?? "Unknown")
+    return conv.is_group ? conv.group_name : conv.participants[1].full_name || "Unknown";
 }
 
 function ConvAvatar({ conv }: { conv: Conversation }) {
-    const name = conversationTitle(conv);
-    const avatarUrl = conv.is_group ? conv.group_avatar_url : conv.other_user?.avatar_url;
+    const name = conv.is_group
+        ? (conv.group_name ?? "Group")
+        : (conv.participants[1]?.full_name ?? conv.participants[1]?.email ?? "?");
+
+    const avatarUrl = conv.is_group ? validAvatar(conv.group_avatar_url) : validAvatar(conv.participants[1].avatar_url);
+
     if (avatarUrl) {
         return (
             <div className="relative shrink-0">
                 <img src={avatarUrl} alt={name} className="w-9 h-9 rounded object-cover" />
-                {!conv.is_group && conv.other_user?.is_online && (
+                {!conv.is_group && conv.participants[1]?.is_online && (
                     <span className="absolute -bottom-px -right-px w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-[#0a0e14]" />
                 )}
             </div>
@@ -66,7 +76,7 @@ function ConvAvatar({ conv }: { conv: Conversation }) {
             <div className={`w-9 h-9 rounded flex items-center justify-center text-[11px] font-bold font-mono ${getAvatarColor(name)}`}>
                 {conv.is_group ? "G" : getInitials(name)}
             </div>
-            {!conv.is_group && conv.other_user?.is_online && (
+            {!conv.is_group && conv.participants[1]?.is_online && (
                 <span className="absolute -bottom-px -right-px w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-[#0a0e14]" />
             )}
         </div>
@@ -369,6 +379,7 @@ export default function Chatlist({
                 {currentUser && (
                     <div className="border-t border-[#1e2a35] px-3 py-2.5 flex items-center gap-2.5">
                         <div className="relative shrink-0">
+
                             {currentUser.avatar_url ? (
                                 <img src={currentUser.avatar_url} alt="" className="w-7 h-7 rounded object-cover" />
                             ) : (

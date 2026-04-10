@@ -64,6 +64,7 @@ export const useConversations = () => {
  },[]);
         
  const startDirect = useCallback(async (userId: number): Promise<Conversation>=>{
+    console.log("startDirect →", userId);
     const conv = await createDirectConversation(userId);
     setConversations((prev)=>{
         if(prev.find((c)=>c.id === conv.id)) return prev;
@@ -73,8 +74,8 @@ export const useConversations = () => {
 },[]);
 
 
-const startGroup = useCallback(async (name: string, participantIds: number[]): Promise<Conversation> => {
- const conv = await createGroupConversation(name, participantIds);
+const startGroup = useCallback(async (name: string, participantIds: number[], avatarUrl?: string | null): Promise<Conversation> => {
+ const conv = await createGroupConversation(name, participantIds, avatarUrl ?? "");
  setConversations((prev)=> [conv, ...prev]);
  return conv;
 },[])
