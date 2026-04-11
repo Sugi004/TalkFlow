@@ -101,7 +101,7 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: int, token: 
         #  Connect
         await manager.connect(conversation_id, user.id, websocket)
         #  Mark online
-        await set_online_status(user.id, True)
+        await set_online_status(user.id)
         if conversation.is_group:
             await manager.broadcast(conversation_id, {"type": "user_joined",
              "user_id": user.id,
@@ -224,7 +224,7 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: int, token: 
                     parts_result = await db.execute(select(Participants).where(and_(Participants.conversation_id == conversation_id, Participants.user_id != user.id)))
                     other_participants = parts_result.scalars().all()
                     for p in other_participants:
-                        await increment_unread_count(p.user_id, conversation_id)
+                        await increment_unread_count(conversation_id, p.user_id)
 
                     #  Build payload
                     payload = {

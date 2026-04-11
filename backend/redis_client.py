@@ -16,10 +16,10 @@ async def get_redis_client():
     return redis_client
 
 #  Online status
-async def set_online_status(user_id: int, status: str):
+async def set_online_status(user_id):
     await redis_client.set(f"user:{user_id}:online", 1, ex=60)
 
-async def set_offline_status(user_id: int):
+async def set_offline_status(user_id):
     await redis_client.delete(f"user:{user_id}:online")
 
 async def is_user_online(user_id: int) -> bool:
