@@ -101,7 +101,7 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: int, token: 
         #  Connect
         await manager.connect(conversation_id, user.id, websocket)
         #  Mark online
-        await set_online_status(user.id)
+        await set_online_status(user.id, True)
         if conversation.is_group:
             await manager.broadcast(conversation_id, {"type": "user_joined",
              "user_id": user.id,
@@ -148,7 +148,7 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: int, token: 
                 #  Typing indicator
                 elif msg_type == "typing":
                     await redis_client.set(f"typing:{conversation_id}:{user.id}", "1", ex=3)
-                    await manager.broadcast(conversation_id, {"type": "typing..", "user_id": user.id, "full_name": user.full_name, "is_typing": data.get("is_typing", True)}, exclude_user_id=user.id)
+                    await manager.broadcast(conversation_id, {"type": "typing", "user_id": user.id, "full_name": user.full_name, "is_typing": data.get("is_typing", True)}, exclude_user_id=user.id)
 
                 #  Read receipts
                 elif msg_type == "read":
@@ -233,7 +233,7 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: int, token: 
                         "id": new_message.id,
                         "conversation_id": conversation_id,
                         "content": content,
-                        "message_type": msg_type,
+                        "message_type": message_type,
                         "file_url": file_url,
                         "language": language,
                         "expires_at": expires_at,
@@ -268,7 +268,7 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: int, token: 
             user.last_seen = datetime.now(timezone.utc)
             await db.commit()
             #  Remove online status from redis
-            await set_offline_status(user.id)
+            await set_offline_status(user.id, False)
 
             #  Notify other user went offline
             if conversation.is_group:
