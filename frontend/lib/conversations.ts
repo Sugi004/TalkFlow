@@ -30,7 +30,7 @@ export const leaveConversation = async(conversation_id: number): Promise<void> =
 }
 
 export const deleteConversation = async(conversation_id: number): Promise<void> => {
-    await api.delete(`/conversations/${conversation_id}`);
+    await api.delete(`/conversations/${conversation_id}/leave`);
 }
     
 

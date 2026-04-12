@@ -75,13 +75,13 @@ export function useWebSocket({
                     }
                     break;
                 case "presence":
-                    if(event.user_id !== undefined &&
-                        event.full_name !== undefined &&
-                        event.is_online !== undefined &&
-                        event.last_seen !== undefined 
-
-                    ){
-                        onPresence(Number(event.user_id), event.full_name, event.is_online, event.last_seen);
+                    if(event.user_id !== undefined && event.is_online !== undefined){
+                        onPresenceRef.current(
+                            Number(event.user_id),
+                            event.full_name ?? "",
+                            event.is_online,
+                            event.last_seen ?? ""
+                        );
                     }
                     break;
                 case "read":

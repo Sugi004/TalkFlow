@@ -12,8 +12,7 @@ import Chatwindow from "@/components/chat/Chatwindow"
 
 export default function ChatPage() {
     const router = useRouter();
-    const { isAuthenticated, logout, token } = useAuth();
-    const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const { isAuthenticated, logout, token, currentUser } = useAuth();
     const [activeConv, setActiveConv] = useState<Conversation | null>(null);
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [showLeaveModal, setShowLeaveModal] = useState(false);

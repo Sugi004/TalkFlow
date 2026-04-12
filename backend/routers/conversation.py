@@ -363,39 +363,32 @@ async def add_participant(conversation_id: int, data: ParticipantCreate, current
 
 @router.delete("/{conversation_id}/leave")
 async def leave_or_delete_conversation(conversation_id: int, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    # check if conversation exists
     conversation_result = await db.execute(select(Conversation).where(Conversation.id == conversation_id))
     conversation = conversation_result.scalar_one_or_none()
     if not conversation:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
-    
-    # check if user is participant
-    participant_result = await db.execute(select(Participants).where(and_(Participants.conversation_id == conversation_id, Participants.user_id == current_user.id)))
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    participant_result = await db.execute(
+        select(Participants).where(and_(
+            Participants.conversation_id == conversation_id,
+            Participants.user_id == current_user.id
+        ))
+    )
     participant = participant_result.scalar_one_or_none()
     if not participant:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a participant in this conversation")
-    
+        raise HTTPException(status_code=403, detail="You are not a participant in this conversation")
+
     if conversation.is_group:
-        # check if user is admin
-        admin_result = await db.execute(select(Participants).where(and_(Participants.conversation_id == conversation.id, Participants.user_id == current_user.id, Participants.is_admin == True)))
-        if not admin_result.scalar_one_or_none():
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can delete a conversation")
-    
-    # check if user is last participant
-    participant_result = await db.execute(select(Participants).where(Participants.conversation_id == conversation.id))
-    participant_count = len(participant_result.scalars().all())
-    
-    
-    if conversation.is_group:
+        # Anyone can leave a group
         await db.delete(participant)
         await db.commit()
-        return {"message": "You have left the conversation"}
+        return {"message": "You have left the group"}
     else:
-        if participant_count == 1:
-            await db.execute(delete(Message).where(Message.conversation_id == conversation_id))
-            await db.execute(delete(Participants).where(Participants.conversation_id == conversation_id))
-            await db.execute(delete(Conversation).where(Conversation.id == conversation_id))
-            await db.commit()
-            return {"message": "Conversation deleted successfully"}
+        # Direct conversation — delete everything for both users
+        await db.execute(delete(Message).where(Message.conversation_id == conversation_id))
+        await db.execute(delete(Participants).where(Participants.conversation_id == conversation_id))
+        await db.execute(delete(Conversation).where(Conversation.id == conversation_id))
+        await db.commit()
+        return {"message": "Conversation deleted successfully"}
     
     
