@@ -63,7 +63,7 @@ export default function ChatPage() {
 
     // Global socket for real-time updates
     useGlobalSocket({
-        userId: currentUser?.id ?? null,
+        user_id: currentUser?.id ?? null,
         token,
         onMessage: (msg) => {
             // If message is for active conversation, ChatWindow handles it
