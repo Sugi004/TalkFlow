@@ -126,6 +126,7 @@ export interface ChatListProps{
     onNewGroup: (name: string, participantIds: number[]) => void;
     onLeave: (conversationId: number) => void;
     onSignOut: () => void;
+    onDelete: (conversationId: number) => void;
 
     
 }

@@ -84,7 +84,6 @@ class MessageCreate(BaseModel):
     message_type: MessageType
     file_url: Optional[str] = None
     language: Optional[str] = None
-    expires_at: Optional[datetime] = None
 
 class MessageResponse(BaseModel):
     id: int
@@ -169,7 +168,6 @@ class WSMessage(BaseModel):
     message_type: Optional[MessageType] = MessageType.text
     file_url: Optional[str] = None
     language: Optional[str] = None
-    expires_at: Optional[datetime] = None
     temp_id: Optional[str] = None #client-side temp id for optimistic UI
 
 class WSTyping(BaseModel):

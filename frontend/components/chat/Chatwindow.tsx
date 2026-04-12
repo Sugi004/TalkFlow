@@ -22,12 +22,12 @@ function formatDate(iso: string) {
 
 
 function convDisplayName(conv: Conversation) {
-    return conv.is_group ? (conv.group_name ?? "Group") : (conv.participants[1]?.full_name ?? conv.participants[1]?.email ?? "Unknown");
+    return conv.is_group ? (conv.group_name ?? "Group") : (conv.other_user?.full_name ?? conv.other_user?.email ?? "Unknown");
 }
 
 function convDisplayAvatar(conv: Conversation) {
     if (conv.is_group && conv.group_avatar_url) return conv.group_avatar_url;
-    if (!conv.is_group && conv.participants[1]?.avatar_url) return conv.participants[1].avatar_url;
+    if (!conv.is_group && conv.other_user?.avatar_url) return conv.other_user.avatar_url;
     return null;
 }
 
@@ -68,7 +68,7 @@ function injectDividers(msgs: ReturnType<typeof buildGroups>): ListItem[] {
 
 function TypingIndicator({ users }: { users: string[] }) {
     if (!users.length) return null;
-    const label = users.length === 1 ? `{users[0]} is typing...` : users.length === 2 ? `{users[0]} and {users[1]} are typing...` : `{users.length} users are typing...`
+    const label = users.length === 1 ? `${users[0]} is typing...` : users.length === 2 ? `${users[0]} and ${users[1]} are typing...` : `${users.length} users are typing...`
     return (
         <div className="flex items-center gap-2 px-5 pb-1.5">
             <div className="wflex gap-[3px]">
@@ -244,7 +244,7 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
     const [messages, setMessages] = useState<Message[]>([])
     const [loadingMsgs, setLoadingMsgs] = useState(false)
     const [hasMore, setHasMore] = useState(true)
-    const [input, setinput] = useState("")
+    const [input, setInput] = useState("")
     const [uploading, setUploading] = useState(false)
     const [uploadProgress, setUploadProgress] = useState(0)
     const [showAiPanel, setShowAiPanel] = useState(false)
@@ -313,7 +313,7 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
 
     const handleTyping = useCallback((user_id: number, full_name: string, is_typing: boolean) => {
         setTypingUsers((prev) =>
-            isTyping ? prev.find((u) => u.id === user_id) ? prev : [...prev, { id: user_id, name: full_name }] : prev.filter((u) => u.id !== user_id)
+            is_typing ? prev.find((u) => u.id === user_id) ? prev : [...prev, { id: user_id, name: full_name }] : prev.filter((u) => u.id !== user_id)
         )
     }, [])
 
@@ -374,7 +374,7 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
     async function handleSend() {
         const content = input.trim();
         if (!content || !convId) return;
-        setinput("");
+        setInput("");
 
         //Auto-resize textarea back
         if (textareaRef.current) textareaRef.current.style.height = "auto";
@@ -391,6 +391,7 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
             language: isCode ? lang : undefined,
             is_deleted: false,
             status: "sent",
+            temp_id: tempId,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             sender: currentUser as unknown as Message["sender"]
@@ -405,7 +406,7 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
     }
     // Typing debounce
     function handleInputChange(e: ChangeEvent<HTMLTextAreaElement>) {
-        setinput(e.target.value)
+        setInput(e.target.value)
         // Auto resize
         e.target.style.height = "auto"
         e.target.style.height = Math.min(e.target.scrollHeight, 144) + "px"
@@ -546,6 +547,159 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
                         <span>✦</span> AI
                     </button>
                 </header>
+                {/* Messages */}
+                <div className="flex-1 overflow-y-auto" onScroll={(e) => {
+                    if ((e.target as HTMLDivElement).scrollTop < 80) handleLoadMore();
+                }}>
+                    <div ref={messagesTopRef} />
+
+                    {loadingMsgs && messages.length === 0 && (
+                        <div className="flex items-center justify-center h-32 gap-2">
+                            <span className="w-5 h-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                            <span className="text-[12px] text-[#4a6070] font-mono">Loading…</span>
+                        </div>
+                    )}
+
+                    {hasMore && messages.length > 0 && (
+                        <div className="flex justify-center py-3">
+                            <button
+                                onClick={handleLoadMore}
+                                disabled={loadingMsgs}
+                                className="text-[11px] text-[#4a6070] font-mono hover:text-cyan-400 transition-colors disabled:opacity-40"
+                            >
+                                {loadingMsgs ? "Loading…" : "↑ Load earlier messages"}
+                            </button>
+                        </div>
+                    )}
+
+                    <div className="pb-2">
+                        {withDivs.map((item, idx) => {
+                            if ("_divider" in item) {
+                                return (
+                                    <div key={(item as any)._key} className="flex items-center gap-3 my-5 px-5">
+                                        <div className="flex-1 h-px bg-[#1e2a35]" />
+                                        <span className="text-[9.5px] text-[#3a4a55] font-mono tracking-widest uppercase">
+                                            {(item as any)._divider}
+                                        </span>
+                                        <div className="flex-1 h-px bg-[#1e2a35]" />
+                                    </div>
+                                );
+                            }
+                            const m = item as Message & { grouped: boolean };
+                            return (
+                                <MessageBubble
+                                    key={m.id}
+                                    message={m}
+                                    isOwn={m.sender?.id === currentUser?.id}
+                                    grouped={m.grouped}
+                                    onDelete={handleDelete}
+                                    onTranslate={handleTranslate}
+                                    translatedContent={translatedMap[m.id]}
+                                />
+                            );
+                        })}
+                    </div>
+
+                    <div ref={messagesEndRef} />
+                </div>
+
+                {/* Typing indicator */}
+                <TypingIndicator users={otherTyping} />
+
+                {/* AI Panel */}
+                {showAiPanel && (
+                    <AiPanel
+                        conversationId={conversation.id}
+                        onReply={(text) => setInput(text)}
+                        onClose={() => setShowAiPanel(false)}
+                    />
+                )}
+
+                {/* Input */}
+                <div className="px-4 pb-4 pt-2 shrink-0">
+                    {/* Upload progress */}
+                    {uploading && (
+                        <div className="mb-2 flex items-center gap-2">
+                            <div className="flex-1 h-1 bg-[#1e2a35] rounded-full overflow-hidden">
+                                <div
+                                    className="h-full bg-cyan-400 rounded-full transition-all"
+                                    style={{ width: `${uploadProgress}%` }}
+                                />
+                            </div>
+                            <span className="text-[10px] text-cyan-400 font-mono">{uploadProgress}%</span>
+                        </div>
+                    )}
+
+                    <div
+                        className={`flex items-end gap-2.5 bg-[#0d1117] border rounded-md px-3.5 py-2.5 transition-all
+            ${isCodeBlock
+                                ? "border-amber-500/40 shadow-[0_0_0_3px_rgba(245,158,11,.06)]"
+                                : "border-[#1e2a35] focus-within:border-cyan-400/50 focus-within:shadow-[0_0_0_3px_rgba(0,204,255,.05)]"
+                            }`}
+                    >
+                        {/* Attach */}
+                        <button
+                            onClick={() => fileRef.current?.click()}
+                            disabled={uploading}
+                            className="shrink-0 mb-0.5 text-[#4a6070] hover:text-cyan-400 transition-colors disabled:opacity-40 text-lg leading-none"
+                            title="Attach file"
+                        >
+                            ⊕
+                        </button>
+                        {!connected && (
+                            <p className="text-[10px] text-[#ff4d6d] font-mono px-1 mb-1">
+                                ⚠ Connecting… please wait before sending
+                            </p>
+                        )}
+                        <input ref={fileRef} type="file" className="hidden" onChange={handleFileUpload} />
+
+                        {/* Textarea */}
+                        <textarea
+                            ref={textareaRef}
+                            value={input}
+                            onChange={handleInputChange}
+                            onKeyDown={handleKeyDown}
+                            placeholder={`Message ${convDisplayName(conversation)} · \`\`\`lang for code`}
+                            rows={1}
+                            className={`flex-1 bg-transparent resize-none outline-none font-mono text-[13px] leading-relaxed
+              placeholder-[#364a58] overflow-y-auto caret-cyan-400
+              ${isCodeBlock ? "text-amber-300" : "text-[#c9d8e8]"}`}
+                            style={{ maxHeight: "144px", scrollbarWidth: "none" }}
+                        />
+
+                        {/* Code badge */}
+                        {isCodeBlock && (
+                            <span className="shrink-0 mb-0.5 text-[9px] text-amber-400 font-mono border border-amber-500/30 px-1.5 py-0.5 rounded">
+                                code
+                            </span>
+                        )}
+
+                        {/* Send */}
+                        <button
+                            onClick={handleSend}
+                            disabled={!input.trim() || uploading || !connected}
+                            className="shrink-0 mb-0.5 w-7 h-7 flex items-center justify-center rounded transition-all
+              bg-cyan-400/10 text-cyan-400 hover:bg-cyan-400/20
+              disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                            title="Send (Enter)"
+                        >
+                            ↑
+                        </button>
+                    </div>
+
+                    <p className="text-[9.5px] text-[#2e3e4a] font-mono mt-1.5 px-1">
+                        <span className="text-[#3a4a55]">Enter</span> send ·{" "}
+                        <span className="text-[#3a4a55]">Shift+Enter</span> newline ·{" "}
+                        <span className="text-amber-600">```lang</span> code block
+                    </p>
+                </div>
+
+                <style>{`
+        @keyframes typingBounce {
+          0%,100% { transform:translateY(0) }
+          50%      { transform:translateY(-4px) }
+        }
+      `}</style>
             </div>
         </>
     )

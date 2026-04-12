@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, delete
 from sqlalchemy.future import select
 from database import get_db
 from models import User
@@ -8,7 +8,9 @@ from schemas import UserResponse, UserSearch
 from auth import get_current_user
 from limiter import limiter
 from models import Conversation, Participants, Message                                              
-from schemas import     ConversationResponse, MessageResponse, ParticipantResponse, ParticipantCreate, DirectConversationCreate, GroupConversationCreate
+from schemas import ConversationResponse, MessageResponse, ParticipantResponse, ParticipantCreate, DirectConversationCreate, GroupConversationCreate
+from redis_client import get_unread_count, is_user_online
+
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -78,7 +80,7 @@ async def get_conversations(current_user: User = Depends(get_current_user), db: 
                     avatar_url=other_user.avatar_url) if other_user else None,
                 last_message=last_message_response,
                 last_message_at=last_message.created_at if last_message else None,
-                unread_count=0, # will implement with redis later
+                unread_count=get_unread_count(current_user.id, conversation.id),
                 participants=[UserSearch(
                     id=u.id,
                     email=u.email,
@@ -101,15 +103,48 @@ async def create_direct_conversation(data:DirectConversationCreate, current_user
         raise HTTPException(status_code = 404, detail="User not found")
     
     #  Check conversation exists
-    existing = await db.execute(select(Conversation).join(Participants).where(and_(Participants.user_id == current_user.id, Conversation.is_group == False)))
+    existing = await db.execute(select(Conversation)
+    .join(Participants)
+    .where(and_(
+        Participants.user_id == current_user.id, 
+        Conversation.is_group == False)
+    ))
     existing = existing.scalars().all()
     
     for conv in existing:
         participants_result = await db.execute(select(Participants).where(Participants.conversation_id == conv.id))
         part_ids = [p.user_id for p in participants_result.scalars().all()]
         if data.participant_id in part_ids and len(part_ids) == 2:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Conversation already exists")
-    
+            participants_result = await db.execute(select(User, Participants).join(Participants).where(Participants.conversation_id == conv.id))
+            participants = participants_result.scalars().all()
+            
+            return ConversationResponse(
+                id=conv.id,
+                is_group=conv.is_group,
+                group_name=conv.group_name,
+                group_avatar_url=conv.group_avatar_url,
+                created_by=conv.created_by,
+                other_user=UserSearch(
+                    id=other_user.id,
+                    email=other_user.email,
+                    full_name=other_user.full_name,
+                    avatar_url=other_user.avatar_url,
+                    last_seen=other_user.last_seen,
+                    created_at=other_user.created_at,
+                    updated_at=other_user.updated_at
+                )   ,
+                participants = [UserSearch(
+                    id=u.id,
+                    email=u.email,
+                    full_name=u.full_name,
+                    avatar_url=u.avatar_url,
+                    last_seen=u.last_seen,
+                    created_at=u.created_at,
+                    updated_at=u.updated_at
+                ) for u in participants],
+                created_at=conv.created_at,
+                updated_at=conv.updated_at
+            )
     #  Create conversation
     new_conversation = Conversation(
         is_group=False,
@@ -137,6 +172,16 @@ async def create_direct_conversation(data:DirectConversationCreate, current_user
         group_name=new_conversation.group_name,
         group_avatar_url=new_conversation.group_avatar_url,
         created_by=new_conversation.created_by,
+        other_user=UserSearch(
+            id=other_user.id,
+            email=other_user.email,
+            full_name=other_user.full_name,
+            avatar_url=other_user.avatar_url,
+            last_seen=other_user.last_seen,
+            is_online=is_user_online(other_user.id),
+            created_at=other_user.created_at,
+            updated_at=other_user.updated_at
+        )   ,
         participants=[UserSearch(
             id=u.id,
             email=u.email,
@@ -317,17 +362,40 @@ async def add_participant(conversation_id: int, data: ParticipantCreate, current
 #  Leave the comversation
 
 @router.delete("/{conversation_id}/leave")
-async def leave_conversation(conversation_id: int, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def leave_or_delete_conversation(conversation_id: int, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    # check if conversation exists
+    conversation_result = await db.execute(select(Conversation).where(Conversation.id == conversation_id))
+    conversation = conversation_result.scalar_one_or_none()
+    if not conversation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    
     # check if user is participant
     participant_result = await db.execute(select(Participants).where(and_(Participants.conversation_id == conversation_id, Participants.user_id == current_user.id)))
     participant = participant_result.scalar_one_or_none()
     if not participant:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a participant in this conversation")
     
-    # remove participant
-    await db.delete(participant)
-    await db.commit()
+    if conversation.is_group:
+        # check if user is admin
+        admin_result = await db.execute(select(Participants).where(and_(Participants.conversation_id == conversation.id, Participants.user_id == current_user.id, Participants.is_admin == True)))
+        if not admin_result.scalar_one_or_none():
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can delete a conversation")
     
-    return {"message": "You have left the conversation"}
+    # check if user is last participant
+    participant_result = await db.execute(select(Participants).where(Participants.conversation_id == conversation.id))
+    participant_count = len(participant_result.scalars().all())
+    
+    
+    if conversation.is_group:
+        await db.delete(participant)
+        await db.commit()
+        return {"message": "You have left the conversation"}
+    else:
+        if participant_count == 1:
+            await db.execute(delete(Message).where(Message.conversation_id == conversation_id))
+            await db.execute(delete(Participants).where(Participants.conversation_id == conversation_id))
+            await db.execute(delete(Conversation).where(Conversation.id == conversation_id))
+            await db.commit()
+            return {"message": "Conversation deleted successfully"}
     
     

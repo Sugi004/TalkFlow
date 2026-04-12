@@ -2,8 +2,8 @@ import api from "./axios";
 import {Message} from "@/types";
 
 export const getMessages = async (conversation_id: number, skip=0, limit=50): Promise<Message[]> => {
-    const {data} = await api.get(`/conversations/${conversation_id}`, {params: {skip, limit}});
-    return data;
+    const {data} = await api.get(`/messages/${conversation_id}`, {params: {skip, limit}});
+    return Array.isArray(data) ? data : data?.items ?? data?.messages ?? [];
 }
 
 export const sendMessage = async (conversation_id: number, 
@@ -12,7 +12,7 @@ export const sendMessage = async (conversation_id: number,
     language?: string; 
     expires_at?: string;
     temp_id?: string}): Promise<Message> => {
-    const {data} = await api.post(`/conversations/${conversation_id}/messages`, payload);
+    const {data} = await api.post(`/messages/${conversation_id}`, payload);
     return data;
 }
 
@@ -21,7 +21,7 @@ export const deleteMessage = async (message_id: number): Promise<void> => {
 }
 
 export const getUnreadMessages = async (conversation_id: number): Promise<Message[]> => {
-    const {data} = await api.get(`/conversations/${conversation_id}/unread`);
+    const {data} = await api.get(`/messages/${conversation_id}/unread`);
     return data;
 }
 

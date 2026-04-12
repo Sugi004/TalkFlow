@@ -21,9 +21,7 @@ router = APIRouter(prefix="/messages", tags=["messages"])
 
 # Get messages in a conversation
 @router.get("/{conversation_id}", response_model=List[MessageResponse])
-async def get_messages(conversation_id: int,page: int = 1, limit: int = 50, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Message).where(Message.conversation_id == conversation_id).where(Message.is_deleted == False).order_by(Message.created_at.asc()))
-    messages = result.scalars().all()
+async def get_messages(conversation_id: int,skip: int = 1, limit: int = 50, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
 
     #Check user is participant
     participant_result = await db.execute(select(Participants).where(and_(Participants.conversation_id == conversation_id, Participants.user_id == current_user.id)))
@@ -32,8 +30,14 @@ async def get_messages(conversation_id: int,page: int = 1, limit: int = 50, curr
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a participant in this conversation")
 
     # Calculate pagination
-    offset = (page - 1) * limit
-    result = await db.execute(select(Message).where(Message.conversation_id == conversation_id).where(Message.is_deleted == False).order_by(Message.created_at.asc()).limit(limit).offset(offset))
+
+    result = await db.execute(select(Message)
+    .where(Message.conversation_id == conversation_id)
+    .where(Message.is_deleted == False)
+    .order_by(Message.created_at.asc())
+    .limit(limit)
+    .offset(skip))
+
     messages = result.scalars().all()
 
     #  Mark all messages as read in Redis
@@ -218,10 +222,5 @@ async def mark_message_as_read(conversation_id: int, current_user: User = Depend
     await db.commit()
     return {"message": "Messages marked as read"}
 
-# delete expired messages
-async def delete_expired_messages(db: AsyncSession):
-    # delete expired messages
-    await db.execute(Message.__table__.delete().where(and_(Message.expires_at < func.now(), Message.expires_at.isnot(None))))
-    await db.commit()
         
 

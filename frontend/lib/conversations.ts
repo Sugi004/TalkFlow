@@ -28,5 +28,9 @@ export const addParticipant = async(conversation_id: number, user_id: number): P
 export const leaveConversation = async(conversation_id: number): Promise<void> => {
     await api.delete(`/conversations/${conversation_id}/leave`);
 }
+
+export const deleteConversation = async(conversation_id: number): Promise<void> => {
+    await api.delete(`/conversations/${conversation_id}`);
+}
     
 

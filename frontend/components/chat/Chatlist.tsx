@@ -4,32 +4,8 @@ import { useState, useRef } from "react"
 import { Conversation, User } from "@/types"
 import { searchUsers } from "@/lib/users"
 import { ChatListProps } from "@/types"
+import { getAvatarColor, getInitials, validAvatar } from "@/lib/utils"
 
-
-export const AVATAR_PALETTES = [
-    "bg-cyan-500/20 text-cyan-400",
-    "bg-emerald-500/20 text-emerald-400",
-    "bg-violet-500/20 text-violet-400",
-    "bg-amber-500/20 text-amber-400",
-    "bg-rose-500/20 text-rose-400",
-    "bg-sky-500/20 text-sky-400",
-];
-
-export const getAvatarColor = (name: string): string => {
-    let h = 0;
-    for (let c of name) h = (h * 31 + c.charCodeAt(0)) & 0xFFFFFF;
-    return AVATAR_PALETTES[h % AVATAR_PALETTES.length];
-}
-
-function validAvatar(url?: string | null): string | null {
-    if (!url) return null;
-    try { new URL(url); return url; } catch { return null; }
-}
-
-function getInitials(name: string): string {
-    const parts = name.trim().split(/\s+/);
-    return parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : name.slice(0, 2).toUpperCase();
-}
 function timeAgo(iso: string) {
     const diff = (Date.now() - new Date(iso).getTime()) / 1000;
     if (diff < 60) return "just now";
@@ -50,7 +26,7 @@ function lastMsgPreview(conv: Conversation): string {
 }
 
 function conversationTitle(conv: Conversation) {
-    return conv.is_group ? conv.group_name : conv.participants[1].full_name || "Unknown";
+    return conv.is_group ? conv.group_name : conv.participants[1]?.full_name || "Unknown";
 }
 
 function ConvAvatar({ conv }: { conv: Conversation }) {
@@ -58,7 +34,7 @@ function ConvAvatar({ conv }: { conv: Conversation }) {
         ? (conv.group_name ?? "Group")
         : (conv.participants[1]?.full_name ?? conv.participants[1]?.email ?? "?");
 
-    const avatarUrl = conv.is_group ? validAvatar(conv.group_avatar_url) : validAvatar(conv.participants[1].avatar_url);
+    const avatarUrl = conv.is_group ? validAvatar(conv.group_avatar_url) : validAvatar(conv.participants[1]?.avatar_url);
 
     if (avatarUrl) {
         return (
@@ -257,7 +233,8 @@ export default function Chatlist({
     onNewDirect,
     onNewGroup,
     loading,
-    onSignOut
+    onSignOut,
+    onDelete,
 }: ChatListProps) {
     const [showModal, setShowModal] = useState(false);
     const [menuConvId, setMenuConvId] = useState<number | null>(null);
@@ -362,12 +339,21 @@ export default function Chatlist({
                                     {/* Dropdown */}
                                     {menuConvId === conv.id && (
                                         <div className="absolute right-3 top-8 z-20 bg-[#0d1117] border border-[#1e2a35] rounded shadow-xl overflow-hidden">
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); onLeave(conv.id); setMenuConvId(null); }}
-                                                className="flex items-center gap-2 px-3 py-2 text-[12px] text-[#ff4d6d] font-mono hover:bg-[#1a2530] w-full text-left whitespace-nowrap"
-                                            >
-                                                Leave
-                                            </button>
+                                            {conv.is_group ? (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); onLeave(conv.id); setMenuConvId(null); }}
+                                                    className="flex items-center gap-2 px-3 py-2 text-[12px] text-[#ff4d6d] font-mono hover:bg-[#1a2530] w-full text-left whitespace-nowrap"
+                                                >
+                                                    Leave Group
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); onDelete(conv.id); setMenuConvId(null); }}
+                                                    className="flex items-center gap-2 px-3 py-2 text-[12px] text-[#ff4d6d] font-mono hover:bg-[#1a2530] w-full text-left whitespace-nowrap"
+                                                >
+                                                    Delete chat
+                                                </button>
+                                            )}
                                         </div>
                                     )}
                                 </div>

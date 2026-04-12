@@ -12,8 +12,7 @@ import Chatwindow from "@/components/chat/Chatwindow"
 
 export default function ChatPage() {
     const router = useRouter();
-    const { isAuthenticated, logout } = useAuth();
-    const [token, setToken] = useState<string | null>(null);
+    const { isAuthenticated, logout, token } = useAuth();
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [activeConv, setActiveConv] = useState<Conversation | null>(null);
     const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -31,6 +30,7 @@ export default function ChatPage() {
         startDirect,
         startGroup,
         leaveConversation,
+        deleteDirectConversation,
     } = useConversations();
 
     // Auth guard
@@ -39,14 +39,6 @@ export default function ChatPage() {
         if (!isAuthenticated) {
             router.push("/login");
             return
-        }
-        const t = localStorage.getItem("token");
-        setToken(t);
-        if (t) {
-            getMe()
-                .then(setCurrentUser)
-                .catch(() => { logout(); router.push("/login") }
-                );
         }
     }, [isAuthenticated]);
 
@@ -62,13 +54,19 @@ export default function ChatPage() {
         return () => window.removeEventListener("popstate", handlePopState);
     }, []);
 
+    // Fetch status
+    useEffect(() => {
+        if (!activeConv) return;
+        const updated = conversations.find((c) => c.id === activeConv.id);
+        if (updated) setActiveConv(updated);
+    }, [conversations]);
+
     const handleConfirmLeave = () => {
         setShowLeaveModal(false);
         setPendingLeave(false);
         window.removeEventListener("popstate", () => { });
         router.push("/login");
     };
-
     // Select conversation
 
     function selectConversation(conversation: Conversation) {
@@ -132,6 +130,7 @@ export default function ChatPage() {
                         onNewDirect={handleNewDirect}
                         onNewGroup={handleNewGroup}
                         onLeave={leaveConversation}
+                        onDelete={deleteDirectConversation}
                         onSignOut={handleSignout}
                     />
                 </div>

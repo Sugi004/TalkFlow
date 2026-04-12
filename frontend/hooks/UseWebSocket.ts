@@ -24,12 +24,35 @@ export function useWebSocket({
     const isMounted = useRef(true);
     const [connected, setConnected] = useState(false);
 
-    const connect = useCallback(() => {
-        if(!conversation_id || !token || !isMounted.current) return;
+    const onMessageRef = useRef(onMessage);
+    const onTypingRef = useRef(onTyping);
+    const onPresenceRef = useRef(onPresence);
+    const onReadRef = useRef(onRead);
+    const onUserJoinedRef = useRef(onUserJoined);
+    const onUserLeftRef = useRef(onUserLeft);
+    const onPongRef = useRef(onPong);
+    const onErrorRef = useRef(onError);
 
-        const url = `${WS_URL}/ws/conversation_id=${conversation_id}?token=${token}`;
-        const ws = new WebSocket(url);
+    useEffect(() => {
+        onMessageRef.current = onMessage;
+        onTypingRef.current = onTyping;
+        onPresenceRef.current = onPresence;
+        onReadRef.current = onRead;
+        onUserJoinedRef.current = onUserJoined;
+        onUserLeftRef.current = onUserLeft;
+        onPongRef.current = onPong;
+        onErrorRef.current = onError;
+    });
+
+    const connect = useCallback(() => {
+        console.log("connect() called →", { conversation_id, token: token ? "exists" : "NULL" });
+    
+        if(!conversation_id || !token || !isMounted.current) return;
         
+        const url = `${WS_URL}/${conversation_id}?token=${token}`;
+        console.log("WS connecting to →", url);
+        const ws = new WebSocket(url);
+        wsRef.current = ws;
         ws.onopen = () => {
             if (!isMounted.current) return;
             setConnected(true);

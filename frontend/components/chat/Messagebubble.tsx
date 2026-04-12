@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Message, User, MessageBubbleProps } from "@/types"
 import CodeBlock from "./Codeblock"
-import { AVATAR_PALETTES, getAvatarColor } from "../chat/Chatlist"
+import { getAvatarColor } from "@/lib/utils"
 
 function initials(name: string) {
     const parts = name.trim().split(/\s+/);
@@ -111,7 +111,7 @@ export default function MessageBubble({ message, isOwn, grouped, onDelete, onTra
         );
     }
 
-    const senderName = message.sender?.full_name ?? message.sender.email ?? "Unknown"
+    const senderName = message.sender?.full_name ?? message.sender?.email ?? "Unknown"
 
     return (
         <>
