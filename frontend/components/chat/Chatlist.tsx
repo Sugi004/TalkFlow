@@ -4,7 +4,7 @@ import { useState, useRef } from "react"
 import { Conversation, User } from "@/types"
 import { searchUsers } from "@/lib/users"
 import { ChatListProps } from "@/types"
-import { getAvatarColor, getInitials, validAvatar } from "@/lib/utils"
+import { getAvatarColor, getInitials, validAvatar, convDisplayName } from "@/lib/utils"
 
 function timeAgo(iso: string) {
     const diff = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -25,22 +25,20 @@ function lastMsgPreview(conv: Conversation): string {
     return msg.content || ""
 }
 
-function conversationTitle(conv: Conversation) {
-    return conv.is_group ? conv.group_name : conv.participants[1]?.full_name || "Unknown";
-}
+
 
 function ConvAvatar({ conv }: { conv: Conversation }) {
     const name = conv.is_group
         ? (conv.group_name ?? "Group")
-        : (conv.participants[1]?.full_name ?? conv.participants[1]?.email ?? "?");
+        : (conv.other_user?.full_name ?? conv.other_user?.email ?? "?");
 
-    const avatarUrl = conv.is_group ? validAvatar(conv.group_avatar_url) : validAvatar(conv.participants[1]?.avatar_url);
+    const avatarUrl = conv.is_group ? validAvatar(conv.group_avatar_url) : validAvatar(conv.other_user?.avatar_url);
 
     if (avatarUrl) {
         return (
             <div className="relative shrink-0">
                 <img src={avatarUrl} alt={name} className="w-9 h-9 rounded object-cover" />
-                {!conv.is_group && conv.participants[1]?.is_online && (
+                {!conv.is_group && conv.other_user?.is_online && (
                     <span className="absolute -bottom-px -right-px w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-[#0a0e14]" />
                 )}
             </div>
@@ -241,7 +239,7 @@ export default function Chatlist({
     const [filter, setFilter] = useState("");
     const filtered = filter.trim()
         ? conversations.filter((c) =>
-            conversationTitle(c).toLowerCase().includes(filter.toLowerCase())
+            convDisplayName(c).toLowerCase().includes(filter.toLowerCase())
         )
         : conversations;
 
@@ -294,7 +292,7 @@ export default function Chatlist({
                         </div>
                     ) : (
                         filtered.map((conv) => {
-                            const name = conversationTitle(conv);
+                            const name = convDisplayName(conv);
                             const preview = lastMsgPreview(conv);
                             const ts = conv.last_message?.created_at ?? conv.created_at;
                             const active = conv.id === activeId;

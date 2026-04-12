@@ -1,14 +1,15 @@
 "use client"
 
+
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Conversation, User } from "@/types"
 import { useAuth } from "@/context/AuthContext"
 import { useConversations } from "@/hooks/UseConversations"
-import { getMe } from "@/lib/users"
 import { markAsRead } from "@/lib/messages"
 import Chatlist from "@/components/chat/Chatlist"
 import Chatwindow from "@/components/chat/Chatwindow"
+import { useGlobalSocket } from "@/hooks/UseGlobalSocket"
 
 export default function ChatPage() {
     const router = useRouter();
@@ -60,6 +61,20 @@ export default function ChatPage() {
         if (updated) setActiveConv(updated);
     }, [conversations]);
 
+    // Global socket for real-time updates
+    useGlobalSocket({
+        userId: currentUser?.id ?? null,
+        token,
+        onMessage: (msg) => {
+            // If message is for active conversation, ChatWindow handles it
+            // If not, update conversation list unread count
+            if (msg.conversation_id !== activeConv?.id) {
+                handleIncomingMessage(msg, activeConv?.id ?? null);
+            }
+
+        }
+    })
+
     const handleConfirmLeave = () => {
         setShowLeaveModal(false);
         setPendingLeave(false);
@@ -89,6 +104,18 @@ export default function ChatPage() {
         selectConversation(conv);
     }
 
+    async function handleDeleteConversation(conversationId: number) {
+        await deleteDirectConversation(conversationId);
+        if (activeConv?.id === conversationId) {
+            setActiveConv(null);
+        }
+    }
+
+    async function handleLeaveConversation(conversationId: number) {
+        await leaveConversation(conversationId);
+        refresh()
+
+    }
     // Sign out
     function handleSignout() {
         logout();
@@ -128,8 +155,8 @@ export default function ChatPage() {
                         onSelect={selectConversation}
                         onNewDirect={handleNewDirect}
                         onNewGroup={handleNewGroup}
-                        onLeave={leaveConversation}
-                        onDelete={deleteDirectConversation}
+                        onLeave={handleLeaveConversation}
+                        onDelete={handleDeleteConversation}
                         onSignOut={handleSignout}
                     />
                 </div>
@@ -141,6 +168,7 @@ export default function ChatPage() {
                     token={token}
                     onIncomingMessage={(msg: any) => handleIncomingMessage(msg, activeConv?.id ?? null)}
                     onPresence={updatePresence}
+                    onDelete={handleDeleteConversation}
                 />
                 {showLeaveModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">

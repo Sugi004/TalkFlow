@@ -258,7 +258,11 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: int, token: 
 
                     #  Publish to Redis pub/sub
                     await redis_client.publish(f"chat:{conversation_id}", json.dumps(payload))
-    
+
+                    #  Publish to user-level channel for offline clients
+                    #  This will be picked up by the user_websocket handler
+                    for p in other_participants:
+                        await redis_client.publish(f"user:{p.user_id}: messages", json.dumps({**payload, "status": "delivered"}))
         except WebSocketDisconnect:
             pass
         finally:
@@ -293,5 +297,37 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: int, token: 
             #  Unsubscribe from Redis pub/sub
             await pubsub.unsubscribe(f"chat:{conversation_id}")
             await pubsub.close()
+
+@router.websocket("/ws/user/{user_id}")
+async def user_websocket(websocket: WebSocket, user_id: int, token: str = Query(...)):
+    async with AsyncSessionLocal() as db:
+        user = await get_user_from_token(token, db)
+        if not user or user.id != user_id:
+            await websocket.close(code=403, reason="Invalid token")
+            return
+
+        await websocket.accept()
+        await set_online_status(user.id)
+
+        pubsub = redis_client.pubsub()
+        await pubsub.subscribe(f"user:{user_id}: messages")
+        #  Subscribe to user-level redis chanel
+        try:
+            while True:
+                msg = await pubsub.get_message(ignore_subscribe_messages=True)
+                if msg and msg['type'] == 'message':
+                    await websocket.send_json(json.loads(msg['data']))
+                await asyncio.sleep(0.01)
+        except WebSocketDisconnect:
+            pass
+        finally:
+            await set_offline_status(user.id)
+            await pubsub.unsubscribe(f"user:{user.id}")
+            await pubsub.close()
+        
+
+        
+    
+
 
  

@@ -7,6 +7,7 @@ import { uploadFile, messageTypeFromMime } from "@/lib/uploads"
 import { getSmartReply, summarizeConversation, translateMessage } from "@/lib/ai"
 import { useWebSocket } from "@/hooks/UseWebSocket"
 import MessageBubble from "./Messagebubble"
+import { convDisplayName } from "@/lib/utils"
 
 // Helpers
 
@@ -20,16 +21,12 @@ function formatDate(iso: string) {
     return d.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
 }
 
-
-function convDisplayName(conv: Conversation) {
-    return conv.is_group ? (conv.group_name ?? "Group") : (conv.other_user?.full_name ?? conv.other_user?.email ?? "Unknown");
-}
-
 function convDisplayAvatar(conv: Conversation) {
     if (conv.is_group && conv.group_avatar_url) return conv.group_avatar_url;
     if (!conv.is_group && conv.other_user?.avatar_url) return conv.other_user.avatar_url;
     return null;
 }
+
 
 // Group: same sender + same type + within 3 min
 function buildGroups(msgs: Message[]) {
@@ -231,7 +228,7 @@ function AiPanel({
                     )}
                 </div>
             </div>
-            );
+
         </>
 
 
@@ -240,7 +237,7 @@ function AiPanel({
 
 // Main component
 
-export default function ChatWindow({ conversation, currentUser, token, onIncomingMessage, onPresence }: ChatWindowProps) {
+export default function ChatWindow({ conversation, currentUser, token, onIncomingMessage, onPresence, onDelete }: ChatWindowProps) {
     const [messages, setMessages] = useState<Message[]>([])
     const [loadingMsgs, setLoadingMsgs] = useState(false)
     const [hasMore, setHasMore] = useState(true)
@@ -257,6 +254,7 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
     const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
     const isTyping = useRef(false)
     const pageRef = useRef(0)
+    const sendReadRef = useRef<() => void>(() => { })
 
     const convId = conversation?.id ?? null
 
@@ -288,7 +286,7 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
         setTranslatedMap({})
         pageRef.current = 0
         loadMessages(convId, true)
-    }, [convId])
+    }, [convId, token])
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -309,7 +307,11 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
             return [...prev, msg]
         })
         onIncomingMessage(msg)
-    }, [onIncomingMessage])
+        if (msg.conversation_id === convId && msg.sender.id !== currentUser?.id) {
+            sendReadRef.current()
+            markAsRead(convId!).catch(() => { })
+        }
+    }, [onIncomingMessage, convId, currentUser?.id])
 
     const handleTyping = useCallback((user_id: number, full_name: string, is_typing: boolean) => {
         setTypingUsers((prev) =>
@@ -368,6 +370,9 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
     useEffect(() => {
         if (convId && connected) sendRead()
     }, [convId, connected]);
+
+    // Store sendRead in ref for use in callbacks
+    useEffect(() => { sendReadRef.current = sendRead; }, [sendRead]);
 
     // Send text
 
@@ -489,6 +494,7 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
     const withDivs = injectDividers(grouped)
     const otherTyping = typingUsers.filter((u) => u.id !== currentUser?.id).map((u) => u.name)
     const isCodeBlock = input.trimStart().startsWith("```")
+    const isMember = conversation?.is_group ? conversation.participants?.some((p) => p.id === currentUser?.id) : true;
 
     if (!conversation) {
         return (
@@ -507,12 +513,25 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
             <div className="flex-1 flex flex-col min-w-0 bg-[#080c10]">
                 {/* Header */}
                 <header className="flex items-center gap-3 px-5 py-3 border-b border-[#1e2a35] bg-[#0d1117] shrink-0">
+                    {/* Avatar — ADD THIS BLOCK */}
+                    {(() => {
+                        const url = convDisplayAvatar(conversation);
+                        const name = convDisplayName(conversation);
+                        const initials = name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                        return url ? (
+                            <img src={url} alt={name} className="w-9 h-9 rounded-full object-cover shrink-0" />
+                        ) : (
+                            <div className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-bold font-mono shrink-0 bg-cyan-400/20 text-cyan-400">
+                                {initials}
+                            </div>
+                        );
+                    })()}
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                             <h1 className="text-[14px] font-bold text-[#c9d8e8] font-mono truncate">
                                 {convDisplayName(conversation)}
                             </h1>
-                            {!conversation.is_group && conversation.participants[1]?.is_online && (
+                            {!conversation.is_group && conversation.other_user?.is_online && (
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
                             )}
                             {conversation.is_group && (
@@ -521,12 +540,12 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
                                 </span>
                             )}
                         </div>
-                        {!conversation.is_group && conversation.participants[1] && (
+                        {!conversation.is_group && conversation.other_user && (
                             <p className="text-[11px] font-mono text-[#4a6070]">
-                                {conversation.participants[1].is_online
+                                {conversation.other_user.is_online
                                     ? "online"
-                                    : conversation.participants[1].last_seen
-                                        ? `last seen ${new Date(conversation.participants[1].last_seen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                                    : conversation.other_user.last_seen
+                                        ? `last seen ${new Date(conversation.other_user.last_seen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
                                         : "offline"}
                             </p>
                         )}
@@ -616,90 +635,98 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
                 )}
 
                 {/* Input */}
-                <div className="px-4 pb-4 pt-2 shrink-0">
-                    {/* Upload progress */}
-                    {uploading && (
-                        <div className="mb-2 flex items-center gap-2">
-                            <div className="flex-1 h-1 bg-[#1e2a35] rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-cyan-400 rounded-full transition-all"
-                                    style={{ width: `${uploadProgress}%` }}
-                                />
+                {isMember ? (
+                    <div className="px-4 pb-4 pt-2 shrink-0">
+                        {/* Upload progress */}
+                        {uploading && (
+                            <div className="mb-2 flex items-center gap-2">
+                                <div className="flex-1 h-1 bg-[#1e2a35] rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-cyan-400 rounded-full transition-all"
+                                        style={{ width: `${uploadProgress}%` }}
+                                    />
+                                </div>
+                                <span className="text-[10px] text-cyan-400 font-mono">{uploadProgress}%</span>
                             </div>
-                            <span className="text-[10px] text-cyan-400 font-mono">{uploadProgress}%</span>
+                        )}
+
+                        <div
+                            className={`flex items-end gap-2.5 bg-[#0d1117] border rounded-md px-3.5 py-2.5 transition-all
+                            ${isCodeBlock
+                                    ? "border-amber-500/40 shadow-[0_0_0_3px_rgba(245,158,11,.06)]"
+                                    : "border-[#1e2a35] focus-within:border-cyan-400/50 focus-within:shadow-[0_0_0_3px_rgba(0,204,255,.05)]"
+                                }`}
+                        >
+                            {/* Attach */}
+                            <button
+                                onClick={() => fileRef.current?.click()}
+                                disabled={uploading}
+                                className="shrink-0 mb-0.5 text-[#4a6070] hover:text-cyan-400 transition-colors disabled:opacity-40 text-lg leading-none"
+                                title="Attach file"
+                            >
+                                ⊕
+                            </button>
+                            {!connected && (
+                                <p className="text-[10px] text-[#ff4d6d] font-mono px-1 mb-1">
+                                    ⚠ Connecting… please wait before sending
+                                </p>
+                            )}
+                            <input ref={fileRef} type="file" className="hidden" onChange={handleFileUpload} />
+
+                            {/* Textarea */}
+                            <textarea
+                                ref={textareaRef}
+                                value={input}
+                                onChange={handleInputChange}
+                                onKeyDown={handleKeyDown}
+                                placeholder={`Message ${convDisplayName(conversation)} · \`\`\`lang for code`}
+                                rows={1}
+                                className={`flex-1 bg-transparent resize-none outline-none font-mono text-[13px] leading-relaxed
+                                placeholder-[#364a58] overflow-y-auto caret-cyan-400
+                                ${isCodeBlock ? "text-amber-300" : "text-[#c9d8e8]"}`}
+                                style={{ maxHeight: "144px", scrollbarWidth: "none" }}
+                            />
+
+                            {/* Code badge */}
+                            {isCodeBlock && (
+                                <span className="shrink-0 mb-0.5 text-[9px] text-amber-400 font-mono border border-amber-500/30 px-1.5 py-0.5 rounded">
+                                    code
+                                </span>
+                            )}
+
+                            {/* Send */}
+                            <button
+                                onClick={handleSend}
+                                disabled={!input.trim() || uploading || !connected}
+                                className="shrink-0 mb-0.5 w-7 h-7 flex items-center justify-center rounded transition-all
+                bg-cyan-400/10 text-cyan-400 hover:bg-cyan-400/20
+                disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                title="Send (Enter)"
+                            >
+                                ↑
+                            </button>
+                        </div>
+
+                        <p className="text-[9.5px] text-[#2e3e4a] font-mono mt-1.5 px-1">
+                            <span className="text-[#3a4a55]">Enter</span> send ·{" "}
+                            <span className="text-[#3a4a55]">Shift+Enter</span> newline ·{" "}
+                            <span className="text-amber-600">```lang</span> code block
+                        </p>
+                    </div>) :
+                    (
+                        <div className="px-4 pb-4 pt-2 shrink-0">
+                            <span className="text-[12px] text-[#4a6070] font-mono">
+                                You left this group. You can no longer send messages.
+                            </span>
                         </div>
                     )}
 
-                    <div
-                        className={`flex items-end gap-2.5 bg-[#0d1117] border rounded-md px-3.5 py-2.5 transition-all
-            ${isCodeBlock
-                                ? "border-amber-500/40 shadow-[0_0_0_3px_rgba(245,158,11,.06)]"
-                                : "border-[#1e2a35] focus-within:border-cyan-400/50 focus-within:shadow-[0_0_0_3px_rgba(0,204,255,.05)]"
-                            }`}
-                    >
-                        {/* Attach */}
-                        <button
-                            onClick={() => fileRef.current?.click()}
-                            disabled={uploading}
-                            className="shrink-0 mb-0.5 text-[#4a6070] hover:text-cyan-400 transition-colors disabled:opacity-40 text-lg leading-none"
-                            title="Attach file"
-                        >
-                            ⊕
-                        </button>
-                        {!connected && (
-                            <p className="text-[10px] text-[#ff4d6d] font-mono px-1 mb-1">
-                                ⚠ Connecting… please wait before sending
-                            </p>
-                        )}
-                        <input ref={fileRef} type="file" className="hidden" onChange={handleFileUpload} />
-
-                        {/* Textarea */}
-                        <textarea
-                            ref={textareaRef}
-                            value={input}
-                            onChange={handleInputChange}
-                            onKeyDown={handleKeyDown}
-                            placeholder={`Message ${convDisplayName(conversation)} · \`\`\`lang for code`}
-                            rows={1}
-                            className={`flex-1 bg-transparent resize-none outline-none font-mono text-[13px] leading-relaxed
-              placeholder-[#364a58] overflow-y-auto caret-cyan-400
-              ${isCodeBlock ? "text-amber-300" : "text-[#c9d8e8]"}`}
-                            style={{ maxHeight: "144px", scrollbarWidth: "none" }}
-                        />
-
-                        {/* Code badge */}
-                        {isCodeBlock && (
-                            <span className="shrink-0 mb-0.5 text-[9px] text-amber-400 font-mono border border-amber-500/30 px-1.5 py-0.5 rounded">
-                                code
-                            </span>
-                        )}
-
-                        {/* Send */}
-                        <button
-                            onClick={handleSend}
-                            disabled={!input.trim() || uploading || !connected}
-                            className="shrink-0 mb-0.5 w-7 h-7 flex items-center justify-center rounded transition-all
-              bg-cyan-400/10 text-cyan-400 hover:bg-cyan-400/20
-              disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                            title="Send (Enter)"
-                        >
-                            ↑
-                        </button>
-                    </div>
-
-                    <p className="text-[9.5px] text-[#2e3e4a] font-mono mt-1.5 px-1">
-                        <span className="text-[#3a4a55]">Enter</span> send ·{" "}
-                        <span className="text-[#3a4a55]">Shift+Enter</span> newline ·{" "}
-                        <span className="text-amber-600">```lang</span> code block
-                    </p>
-                </div>
-
                 <style>{`
-        @keyframes typingBounce {
-          0%,100% { transform:translateY(0) }
-          50%      { transform:translateY(-4px) }
-        }
-      `}</style>
+            @keyframes typingBounce {
+            0%,100% { transform:translateY(0) }
+            50%      { transform:translateY(-4px) }
+            }
+        `}</style>
             </div>
         </>
     )

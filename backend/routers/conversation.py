@@ -35,8 +35,11 @@ async def get_conversations(current_user: User = Depends(get_current_user), db: 
 
         # for 1-1 conversation
         other_user = None
+        other_user_online = False
         if not conversation.is_group:
             other_user = next((p for p in participant_users if p.id != current_user.id), None)
+            if other_user:
+                other_user_online = await is_user_online(other_user.id)
         
         # get last message
         last_message_result = await db.execute(select(Message).where(Message.conversation_id == conversation.id).where(Message.is_deleted == False).order_by(Message.created_at.desc()).limit(1))
@@ -77,7 +80,13 @@ async def get_conversations(current_user: User = Depends(get_current_user), db: 
                     id=other_user.id,
                     email=other_user.email,
                     full_name=other_user.full_name,
-                    avatar_url=other_user.avatar_url) if other_user else None,
+                    avatar_url=other_user.avatar_url,
+                    is_online=other_user_online,
+                    last_seen=other_user.last_seen,
+
+                    
+                    ) if other_user else None,
+                    
                 last_message=last_message_response,
                 last_message_at=last_message.created_at if last_message else None,
                 unread_count=get_unread_count(current_user.id, conversation.id),

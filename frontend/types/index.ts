@@ -137,6 +137,7 @@ export interface ChatWindowProps{
     token: string | null;
     onPresence:(userId: number, fullName: string, isOnline: boolean, lastSeen: string) => void;
     onIncomingMessage:(message: Message) => void;
+    onDelete: (conversationId: number) => void;
     
 }
 

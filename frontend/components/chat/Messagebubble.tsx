@@ -102,9 +102,9 @@ export default function MessageBubble({ message, isOwn, grouped, onDelete, onTra
 
     if (message.is_deleted) {
         return (
-            <div className={`flex gap-3 px-4 ${grouped ? "mt-0.5" : "mt-4"}`}>
+            <div className={`flex gap-3 px-4 flex-row-reverse ${grouped ? "mt-0.5" : "mt-4"}`} >
                 <div className="w-8 shrink-0" />
-                <p className="text-[12px] text-[#3a4a55] font-mono italic">
+                <p className="text-[12px] text-[#3a4a55] font-mono italic ">
                     This message was deleted.
                 </p>
             </div>
@@ -115,27 +115,26 @@ export default function MessageBubble({ message, isOwn, grouped, onDelete, onTra
 
     return (
         <>
-            <div className={`flex gap-3 px-4 ${grouped ? "mt-0.5" : "mt-4"}`}
+            <div
+                className={`flex gap-3 px-4 ${grouped ? "mt-0.5" : "mt-4"} ${isOwn ? "flex-row-reverse" : ""}`}
                 onMouseEnter={() => setHover(true)}
-                onMouseLeave={() => {
-                    setHover(false)
-                    setShowMenu(false)
-                }}
+                onMouseLeave={() => { setHover(false); setShowMenu(false); }}
             >
-                {/* Avatar */}
+                {/* Avatar — only show for others, not own messages */}
                 <div className="w-8 shrink-0 mt-0.5">
-                    {!grouped && message.sender && <Avatar user={message.sender} />}
+                    {!grouped && !isOwn && message.sender && <Avatar user={message.sender} />}
                 </div>
 
-                {/* Message content */}
-                <div className="flex-1 min-w-0">
-                    {/* Header row */}
+                {/* Content */}
+                <div className={`flex flex-col max-w-[70%] ${isOwn ? "items-end" : "items-start"}`}>
+
+                    {/* Header row — sender name + time */}
                     {!grouped && (
-                        <div className="flex items-baseline gap-2 mb-1">
+                        <div className={`flex items-baseline gap-2 mb-1 ${isOwn ? "flex-row-reverse" : ""}`}>
                             <span className={`text-[12.5px] font-semibold font-mono ${isOwn ? "text-cyan-400" : "text-[#c9d8e8]"}`}>
                                 {isOwn ? "you" : senderName}
                             </span>
-                            <span className="text-[10px] text-[#3a4a55] font-mono opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span className="text-[10px] text-[#3a4a55] font-mono">
                                 {formatTime(message.created_at)}
                             </span>
                             {message.expires_at && <ExpiryBadge expiresAt={message.expires_at} />}
@@ -143,56 +142,47 @@ export default function MessageBubble({ message, isOwn, grouped, onDelete, onTra
                         </div>
                     )}
 
-                    {/* Content */}
+                    {/* Bubble */}
                     {message.message_type === "code" ? (
                         <CodeBlock code={message.content ?? ""} language={message.language} />
                     ) : (
                         <>
                             {message.content && (
-                                <p className="text-[13px] text-[#c9d8e8] font-mono leading-relaxed whitespace-pre-wrap wrap-break-words">
+                                <div className={`px-3.5 py-2 rounded-2xl text-[13px] font-mono leading-relaxed whitespace-pre-wrap wrap-break-word
+                        ${isOwn
+                                        ? "bg-cyan-400/20 text-cyan-100 rounded-tr-sm"
+                                        : "bg-[#0d1117] border border-[#1e2a35] text-[#c9d8e8] rounded-tl-sm"
+                                    }`}>
                                     {translatedContent ?? message.content}
                                     {translatedContent && (
                                         <span className="ml-2 text-[9px] text-amber-400 font-mono">[translated]</span>
                                     )}
-                                </p>
+                                </div>
                             )}
                             <MediaContent msg={message} />
                         </>
                     )}
-
-                    {/* Timestamp for grouped messages (on hover) */}
-                    {grouped && (
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[9.5px] text-[#2e3e4a] font-mono opacity-0 group-hover:opacity-100 transition-opacity w-8 text-center leading-none">
-                            {formatTime(message.created_at).split(":")[1]}
-                        </span>
-                    )}
                 </div>
 
-                {/* Context menu */}
+                {/* Context menu — flip side for own messages */}
                 {hover && (
-                    <div className="absolute right-4 top-0 flex items-center gap-0.5 z-10">
+                    <div className="flex items-start gap-0.5 pt-1 self-start">
                         {onTranslate && (
                             <button
                                 onClick={() => onTranslate(message.id)}
                                 className="w-7 h-7 flex items-center justify-center rounded text-[#4a6070] hover:text-amber-400 hover:bg-[#1a2530] transition-colors text-xs"
                                 title="Translate"
-                            >
-                                🌐
-                            </button>
+                            >🌐</button>
                         )}
                         {isOwn && onDelete && (
                             <button
                                 onClick={() => onDelete(message.id)}
                                 className="w-7 h-7 flex items-center justify-center rounded text-[#4a6070] hover:text-[#ff4d6d] hover:bg-[#1a2530] transition-colors text-xs"
                                 title="Delete"
-                            >
-                                🗑
-                            </button>
+                            >🗑</button>
                         )}
                     </div>
                 )}
-
-
             </div>
         </>
     )

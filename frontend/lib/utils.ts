@@ -1,3 +1,5 @@
+import { Conversation } from "@/types";
+
 export const AVATAR_PALETTES = [
     "bg-cyan-500/20 text-cyan-400",
     "bg-emerald-500/20 text-emerald-400",
@@ -22,3 +24,8 @@ export const getInitials = (name: string): string => {
     const parts = name.trim().split(/\s+/);
     return parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : name.slice(0, 2).toUpperCase();
 }
+
+export function convDisplayName(conv: Conversation) {
+    return conv.is_group ? (conv.group_name ?? "Group") : (conv.other_user?.full_name ?? conv.other_user?.email ?? "Unknown");
+}
+
