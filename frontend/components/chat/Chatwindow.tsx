@@ -5,7 +5,7 @@ import { Conversation, Message, User, ChatWindowProps } from "@/types"
 import { getMessages, deleteMessage, markAsRead } from "@/lib/messages"
 import { uploadFile, messageTypeFromMime } from "@/lib/uploads"
 import { getSmartReply, summarizeConversation, translateMessage } from "@/lib/ai"
-import { useWebSocket } from "@/hooks/UseWebSocket"
+import { useWebSocket } from "@/hooks/useWebSocket"
 import MessageBubble from "./Messagebubble"
 import { convDisplayName } from "@/lib/utils"
 

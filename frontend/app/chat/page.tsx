@@ -5,11 +5,11 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Conversation, User } from "@/types"
 import { useAuth } from "@/context/AuthContext"
-import { useConversations } from "@/hooks/UseConversations"
+import { useConversations } from "@/hooks/useConversations"
 import { markAsRead } from "@/lib/messages"
 import Chatlist from "@/components/chat/Chatlist"
 import Chatwindow from "@/components/chat/Chatwindow"
-import { useGlobalSocket } from "@/hooks/UseGlobalSocket"
+import { useGlobalSocket } from "@/hooks/useGlobalSocket"
 
 export default function ChatPage() {
     const router = useRouter();
