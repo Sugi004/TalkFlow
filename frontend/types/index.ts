@@ -47,10 +47,11 @@ export interface WSMessage{
     type: "message" | "typing" | "read" | "presence" | "pong" | "error" | "welcome" | "user_joined" | "user_left";
     id?: number;
     temp_id?: string;
-    conversation_id?: string;
+    conversation_id?: number;
     content?: string;
     message_type?: string;
     file_url?: string;
+    read_by?: number;
     language?: string;
     expires_at?: string;
     is_deleted?: boolean;

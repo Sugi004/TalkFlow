@@ -63,12 +63,12 @@ export function useWebSocket({
                switch (event.type){
                 case "message":
                     if (event.id && event.sender){
-                        onMessage(event as unknown as Message);
+                        onMessageRef.current(event as unknown as Message);
                     }
                     break;
                 case "typing":
                     if (event.user_id !== undefined && event.full_name !== undefined){
-                        onTyping(Number(event.user_id), event.full_name, event.is_typing ?? false);
+                        onTypingRef.current(Number(event.user_id), event.full_name, event.is_typing ?? false);
                     }
                     break;
                 case "presence":
@@ -82,28 +82,30 @@ export function useWebSocket({
                     }
                     break;
                 case "read":
-                    if(event.id !== undefined && event.user_id !== undefined){
-                        onRead(Number(event.id), Number(event.user_id ?? 0));
+                    if(event.conversation_id !== undefined && event.read_by !== undefined){
+                        onReadRef.current(Number(event.conversation_id), Number(event.read_by));
                     }
                     break;
                 case "user_joined":
                     if(event.user_id !== undefined && event.full_name !== undefined){
-                        onUserJoined(Number(event.user_id), event.full_name)
+                        onUserJoinedRef.current(Number(event.user_id), event.full_name)
                     }
                     break;
                 case  "user_left":
                     if(event.user_id !== undefined && event.full_name !== undefined){
-                        onUserLeft(Number(event.user_id), event.full_name)
+                        onUserLeftRef.current(Number(event.user_id), event.full_name)
                     }
                     break;
                 case "pong":
-                    onPong();
+                    onPongRef.current();
                     break;
                 case "welcome":
-                    console.log("Connected to WebSocket server");
-                    break;
+                    if (wsRef.current?.readyState === WebSocket.OPEN) {
+                            wsRef.current.send(JSON.stringify({ type: "read" }));
+                        }
+                        break;
                 case "error":
-                    onError(event.content ?? "Unknown error");
+                    onErrorRef.current(event.content ?? "Unknown error");
                     break;
 
                }
@@ -113,6 +115,7 @@ export function useWebSocket({
         };
 
         ws.onclose = (e) => {
+            if(wsRef.current !== ws) return;
             if(!isMounted.current) return;
             setConnected(false);
             if(retryCount.current < 5){
@@ -183,10 +186,11 @@ export function useWebSocket({
         wsRef.current.send(JSON.stringify(frame));
     },[]);
 
-    const sendRead = useCallback(() => {
-        if(wsRef.current?.readyState !== WebSocket.OPEN) return;
+    const sendRead = useCallback((): boolean => {
+        if(wsRef.current?.readyState !== WebSocket.OPEN) return false;
         const frame: WSOutgoing = {type: "read"}
         wsRef.current.send(JSON.stringify(frame));
+        return true;
     },[]);
 
     return {connected, sendMessage, sendTyping, sendRead};

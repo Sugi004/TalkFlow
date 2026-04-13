@@ -36,11 +36,16 @@ async def get_conversations(current_user: User = Depends(get_current_user), db: 
         # for 1-1 conversation
         other_user = None
         other_user_online = False
-        if not conversation.is_group:
+        # if not conversation.is_group:
+        #     other_user = next((p for p in participant_users if p.id != current_user.id), None)
+        #     if other_user:
+        #         other_user_online = await is_user_online(other_user.id)
+        
+        if not conversation.is_group and len(participant_users) == 2:
             other_user = next((p for p in participant_users if p.id != current_user.id), None)
             if other_user:
                 other_user_online = await is_user_online(other_user.id)
-        
+
         # get last message
         last_message_result = await db.execute(select(Message).where(Message.conversation_id == conversation.id).where(Message.is_deleted == False).order_by(Message.created_at.desc()).limit(1))
         last_message = last_message_result.scalar_one_or_none()

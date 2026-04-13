@@ -25,6 +25,6 @@ export const getUnreadMessages = async (conversation_id: number): Promise<Messag
     return data;
 }
 
-export const markAsRead = async (message_id: number): Promise<void> => {
-    await api.post(`/messages/${message_id}/read`);
+export const markAsRead = async (conversation_id: number): Promise<void> => {
+    await api.post(`/messages/${conversation_id}/read`);
 }

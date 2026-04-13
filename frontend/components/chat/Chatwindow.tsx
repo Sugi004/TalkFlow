@@ -285,6 +285,10 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
         setShowAiPanel(false)
         setTranslatedMap({})
         pageRef.current = 0
+    }, [convId, token])
+
+    useEffect(() => {
+        if (!convId || !token) return;
         loadMessages(convId, true)
     }, [convId, token])
 
@@ -304,12 +308,14 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
                     return updated
                 }
             }
+            if (prev.some((m) => m.id === msg.id)) return prev;
             return [...prev, msg]
         })
         onIncomingMessage(msg)
-        if (msg.conversation_id === convId && msg.sender.id !== currentUser?.id) {
+        if (msg.conversation_id === convId && msg.sender?.id !== currentUser?.id) {
             sendReadRef.current()
-            markAsRead(convId!).catch(() => { })
+            markAsRead(msg.conversation_id).catch(() => { })
+            setMessages((prev) => prev.map((m) => (m.status === "delivered" ? { ...m, status: "read" } : m)))
         }
     }, [onIncomingMessage, convId, currentUser?.id])
 
@@ -320,7 +326,12 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
     }, [])
 
     const handleRead = useCallback((_convId: number, _readBy: number) => {
-        setMessages((prev) => prev.map((m) => (m.status === "delivered" ? { ...m, status: "read" } : m)))
+        setMessages((prev) =>
+            prev.map((m) =>
+            ((m.status === "sent" || m.status === "delivered")
+                ? { ...m, status: "read" as const }
+                : m))
+        )
     }, [])
 
     const handleUserJoined = useCallback((_uid: number, fullName: string) => {
@@ -366,13 +377,17 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
         onError: (error: string) => { },
     });
 
-    // Mark as read when window is focused
-    useEffect(() => {
-        if (convId && connected) sendRead()
-    }, [convId, connected]);
-
     // Store sendRead in ref for use in callbacks
     useEffect(() => { sendReadRef.current = sendRead; }, [sendRead]);
+
+    // Mark as read when window is focused
+    useEffect(() => {
+        if (convId && connected) {
+            sendRead()
+            markAsRead(convId).catch(() => { })
+        }
+
+    }, [convId, connected]);
 
     // Send text
 
