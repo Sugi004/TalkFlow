@@ -45,12 +45,9 @@ export function useWebSocket({
     });
 
     const connect = useCallback(() => {
-        console.log("connect() called →", { conversation_id, token: token ? "exists" : "NULL" });
-    
         if(!conversation_id || !token || !isMounted.current) return;
         
         const url = `${WS_URL}/${conversation_id}?token=${token}`;
-        console.log("WS connecting to →", url);
         const ws = new WebSocket(url);
         wsRef.current = ws;
         ws.onopen = () => {

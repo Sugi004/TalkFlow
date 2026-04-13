@@ -27,7 +27,7 @@ export function useGlobalSocket({
     const connect = useCallback(() => {
         if(!user_id || !token) return;
 
-        const url = `${WS_URL}/user/${user_id}?token = ${token}`
+        const url = `${WS_URL}/user/${user_id}?token=${token}`
         const ws = new WebSocket(url)
         wsRef.current = ws
         

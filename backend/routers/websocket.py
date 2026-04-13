@@ -303,6 +303,8 @@ async def user_websocket(websocket: WebSocket, user_id: int, token: str = Query(
     async with AsyncSessionLocal() as db:
         user = await get_user_from_token(token, db)
         if not user or user.id != user_id:
+            await websocket.accept()
+            await websocket.send_json({"type": "error", "message": "Invalid token"})
             await websocket.close(code=403, reason="Invalid token")
             return
 
