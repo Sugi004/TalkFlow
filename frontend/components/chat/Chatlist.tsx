@@ -25,8 +25,6 @@ function lastMsgPreview(conv: Conversation): string {
     return msg.content || ""
 }
 
-
-
 function ConvAvatar({ conv }: { conv: Conversation }) {
     const name = conv.is_group
         ? (conv.group_name ?? "Group")
@@ -302,7 +300,7 @@ export default function Chatlist({
                                 <div
                                     key={conv.id}
                                     className={`relative flex items-center gap-2.5 px-3 py-2.5 cursor-pointer transition-colors group
-                    ${active ? "bg-cyan-400/10" : "hover:bg-[#111820]"}`}
+                                    ${active ? "bg-cyan-400/10" : "hover:bg-[#111820]"}`}
                                     onClick={() => { onSelect(conv); setMenuConvId(null); }}
                                 >
                                     <ConvAvatar conv={conv} />
@@ -409,5 +407,3 @@ export default function Chatlist({
         </>
     )
 }
-
-

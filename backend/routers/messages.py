@@ -21,8 +21,7 @@ router = APIRouter(prefix="/messages", tags=["messages"])
 
 # Get messages in a conversation
 @router.get("/{conversation_id}", response_model=List[MessageResponse])
-async def get_messages(conversation_id: int,skip: int = 1, limit: int = 50, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-
+async def get_messages(conversation_id: int,skip: int = 0, limit: int = 50, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     #Check user is participant
     participant_result = await db.execute(select(Participants).where(and_(Participants.conversation_id == conversation_id, Participants.user_id == current_user.id)))
 
@@ -31,61 +30,95 @@ async def get_messages(conversation_id: int,skip: int = 1, limit: int = 50, curr
 
     # Calculate pagination
 
-    result = await db.execute(select(Message)
+    result = await db.execute(
+    select(Message, User)
+    .join(User, User.id == Message.sender_id)
     .where(Message.conversation_id == conversation_id)
     .where(Message.is_deleted == False)
-    .order_by(Message.created_at.asc())
+    .order_by(Message.created_at.desc(), Message.id.desc())
+    .offset(skip)
     .limit(limit)
-    .offset(skip))
-
-    messages = result.scalars().all()
-
-    #  Mark all messages as read in Redis
-    await set_bulk_message_status(conversation_id, [message.id for message in messages if message.sender_id != current_user.id], "read")
+    .execution_options(synchronize_session=False)
+    )
+    messages = list(reversed(result.all()))
 
     # Reset unread count
     await reset_unread_count(current_user.id, conversation_id)
 
-    #  Sync read status to DB
-    await db.execute(update(Message).where(and_(Message.conversation_id == conversation_id, Message.sender_id != current_user.id, Message.status != MessageStatus.read, Message.is_deleted == False)).values(status=MessageStatus.read))
-    await db.commit()
+    valid_ids = [
+        message.id
+        for message, sender in messages
+        if message.id is not None
+        and message.sender_id != current_user.id
+    ]
 
+    #  Mark all messages as read in Redis
+    if valid_ids:
+        await set_bulk_message_status(
+            conversation_id, 
+            valid_ids,
+            "read"
+        )
+
+    #  Sync read status to DB
+    await db.execute(
+        update(Message)
+        .where(
+            and_(
+                Message.conversation_id == conversation_id, 
+                Message.sender_id != current_user.id, 
+                Message.status != MessageStatus.read, 
+                Message.is_deleted == False)
+            ).values(status=MessageStatus.read)
+             .execution_options(synchronize_session=False)
+    )
+    
     # Build message response
     message_responses = []
-    for message in messages:
-        sender_result = await db.execute(select(User).where(User.id == message.sender_id))
-        sender = sender_result.scalar_one_or_none()
-
-        redis_status = await get_message_status(message.conversation_id, message.id)
-        final_status = redis_status if redis_status else message.status.value
-        message_responses.append(
-            MessageResponse(
-                id=message.id,
-                conversation_id=message.conversation_id,
-                message_type=message.message_type,
-                content=message.content,
-                file_url=message.file_url,
-                language=message.language,
-                status=final_status,
-                expires_at=message.expires_at,
-                is_deleted=message.is_deleted,
-                created_at=message.created_at,
-                updated_at=message.updated_at,
-                sender=UserSearch(
-                    id=sender.id,
-                    email=sender.email,
-                    full_name=sender.full_name,
-                    avatar_url=sender.avatar_url,
-                ) if sender else None
-            )
+    for message, sender in messages:
+        redis_status = await get_message_status(
+            message.conversation_id,
+            message.id
         )
-    
+        is_incoming = message.sender_id != current_user.id
+        final_status = redis_status or (MessageStatus.read if is_incoming else message.status)
+
+        message_responses.append(
+                MessageResponse(
+                    id=message.id,
+                    conversation_id=message.conversation_id,
+                    message_type=message.message_type,
+                    content=message.content,
+                    file_url=message.file_url,
+                    language=message.language,
+                    status=final_status,
+                    is_deleted=message.is_deleted,
+                    created_at=message.created_at,
+                    updated_at=message.updated_at,
+                    sender=UserSearch(
+                        id=sender.id,
+                        email=sender.email,
+                        full_name=sender.full_name,
+                        avatar_url=sender.avatar_url,
+                    ) if sender else None
+                )
+            )
+
+    await db.commit()
     return message_responses
 
 @router.post("/{conversation_id}", response_model=MessageResponse)
 async def send_message(conversation_id: int, message: MessageCreate, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     # check user is participant
-    participant_result = await db.execute(select(Participants).where(and_(Participants.conversation_id == conversation_id, Participants.user_id == current_user.id)))
+    participant_result = await db.execute(
+        select(Participants)
+        .where(
+            and_(
+                Participants.conversation_id == conversation_id, 
+                Participants.user_id == current_user.id
+            )
+        )
+    )
     if not  participant_result.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a participant in this conversation")
     
@@ -107,12 +140,6 @@ async def send_message(conversation_id: int, message: MessageCreate, current_use
         is_deleted=False,
     )
     db.add(new_message)
-
-    # Update conversation last_message_at
-    conversation = await db.execute(select(Conversation).where(Conversation.id == conversation_id))
-    conversation = conversation.scalar_one_or_none()
-    if conversation:
-        conversation.updated_at = func.now()
     await db.commit()
     await db.refresh(new_message)
 
@@ -121,9 +148,11 @@ async def send_message(conversation_id: int, message: MessageCreate, current_use
 
     # Increment unread count for all participants except sender
     parts_result = await db.execute(select(Participants).where(and_(Participants.conversation_id == conversation_id, Participants.user_id != current_user.id)))
+    
     other_participants = parts_result.scalars().all()
     for p in other_participants:
         await increment_unread_count(conversation_id, p.user_id)
+    
     return MessageResponse(
         id=new_message.id,
         conversation_id=new_message.conversation_id,
@@ -141,48 +170,26 @@ async def send_message(conversation_id: int, message: MessageCreate, current_use
             email=current_user.email,
             full_name=current_user.full_name,
             avatar_url=current_user.avatar_url,
-
         )
     )
 
     
-#  delete message
-@router.delete("/{message_id}", response_model=MessageResponse)
+@router.delete("/{message_id}")
 async def delete_message(message_id: int, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    # check user is participant
-    message = await db.execute(select(Message).where(Message.id == message_id))
-    message = message.scalar_one_or_none()
+    message_result = await db.execute(select(Message).where(Message.id == message_id))
+    message = message_result.scalar_one_or_none()
+   
     if not message:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
-    if message.sender_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to delete this message")
-    message.is_deleted = True
-    message.content = "Message deleted"
-    message.message_type = MessageType.text
-    message.file_url = None
-    message.language = None
-    message.expires_at = None
+        
+    # check user is participant
+    participant_result = await db.execute(select(Participants).where(and_(Participants.conversation_id == message.conversation_id, Participants.user_id == current_user.id)))
+    if not participant_result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You must be a participant in this conversation to delete messages")
+    
+    await db.delete(message)
     await db.commit()
-    await db.refresh(message)
-    return MessageResponse(
-        id=message.id,
-        conversation_id=message.conversation_id,
-        message_type=message.message_type,
-        content=message.content,
-        file_url=message.file_url,
-        language=message.language,
-        expires_at=message.expires_at,
-        is_deleted=message.is_deleted,
-        status=message.status,
-        created_at=message.created_at,
-        updated_at=message.updated_at,
-        sender=UserSearch(
-            id=current_user.id,
-            email=current_user.email,
-            full_name=current_user.full_name,
-            avatar_url=current_user.avatar_url,
-        )
-    )
+    return {"detail": "Message permanently deleted"}
 
 #  Get unread count
 @router.get("/{conversation_id}/unread")
@@ -194,18 +201,36 @@ async def get_unread_count_api(conversation_id: int, current_user: User = Depend
     
 #  Mark message as read
 @router.post("/{conversation_id}/read")
-async def mark_message_as_read(conversation_id: int, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def mark_message_as_read(conversation_id: int, 
+    current_user: User = Depends(get_current_user), 
+    db: AsyncSession = Depends(get_db)
+):
     # check user is participant
-    participant_result = await db.execute(select(Participants).where(and_(Participants.conversation_id == conversation_id, Participants.user_id == current_user.id)))
+    participant_result = await db.execute(select(Participants)
+    .where(
+        and_(
+            Participants.conversation_id == conversation_id, 
+            Participants.user_id == current_user.id
+        )
+    ))
+
     if not  participant_result.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a participant in this conversation")
 
     #  Get all messages in conversation
-    messages = await db.execute(select(Message).where(and_(Message.conversation_id == conversation_id, Message.sender_id != current_user.id, Message.is_deleted == False)))
+    messages = await db.execute(
+        select(Message)
+        .where(
+            and_(
+                Message.conversation_id == conversation_id, 
+                Message.sender_id != current_user.id, 
+                Message.is_deleted == False
+        )
+    ))
     messages = messages.scalars().all()
 
     #  Update redis status
-    await set_bulk_message_status(conversation_id, [m.id for m in messages], "read")
+    await set_bulk_message_status(conversation_id, [m.id for m in messages if m.id is not None], "read")
 
     #  Reset unread count
     await reset_unread_count(current_user.id, conversation_id)
@@ -213,14 +238,17 @@ async def mark_message_as_read(conversation_id: int, current_user: User = Depend
     # Mark message as read
     await db.execute(
         update(Message).
-        where(and_(Message.conversation_id == conversation_id, 
-        Message.sender_id != current_user.id, Message.is_deleted == False, 
-        Message.status != MessageStatus.read
-        )).values(status = MessageStatus.read))
+        where(
+            and_(
+                Message.conversation_id == conversation_id, 
+                Message.sender_id != current_user.id, 
+                Message.is_deleted == False, 
+                Message.status != MessageStatus.read
+            )
+        ).values(status = MessageStatus.read))
 
 
     await db.commit()
     return {"message": "Messages marked as read"}
 
         
-

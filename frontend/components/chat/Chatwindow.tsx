@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback, KeyboardEvent, ChangeEvent } from "react"
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, KeyboardEvent, ChangeEvent } from "react"
 import { Conversation, Message, User, ChatWindowProps } from "@/types"
 import { getMessages, deleteMessage, markAsRead } from "@/lib/messages"
 import { uploadFile, messageTypeFromMime } from "@/lib/uploads"
@@ -59,6 +59,12 @@ function injectDividers(msgs: ReturnType<typeof buildGroups>): ListItem[] {
         result.push(m);
     }
     return result;
+}
+
+function mergeUniqueMessages(existing: Message[], incoming: Message[]) {
+    const seen = new Set(existing.map((m) => m.id))
+    const merged = [...incoming.filter((m) => !seen.has(m.id)), ...existing]
+    return merged.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
 }
 
 // typing indicator
@@ -237,63 +243,118 @@ function AiPanel({
 
 // Main component
 
-export default function ChatWindow({ conversation, currentUser, token, onIncomingMessage, onPresence, onDelete }: ChatWindowProps) {
-    const [messages, setMessages] = useState<Message[]>([])
+export default function ChatWindow({ conversation, currentUser, token, onIncomingMessage, onPresence, onDelete, onExternalRead }: ChatWindowProps) {
+    const PAGE_SIZE = 50
+    const [messagesMap, setMessagesMap] = useState<Record<number, Message[]>>({})
     const [loadingMsgs, setLoadingMsgs] = useState(false)
-    const [hasMore, setHasMore] = useState(true)
+    const [hasMoreMap, setHasMoreMap] = useState<Record<number, boolean>>({})
     const [input, setInput] = useState("")
     const [uploading, setUploading] = useState(false)
     const [uploadProgress, setUploadProgress] = useState(0)
     const [showAiPanel, setShowAiPanel] = useState(false)
     const [typingUsers, setTypingUsers] = useState<{ id: number; name: string }[]>([])
     const [translatedMap, setTranslatedMap] = useState<Record<number, string>>({})
+    const messagesContainerRef = useRef<HTMLDivElement>(null)
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const messagesTopRef = useRef<HTMLDivElement>(null)
     const fileRef = useRef<HTMLInputElement>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
     const isTyping = useRef(false)
-    const pageRef = useRef(0)
+    const offsetsCacheRef = useRef<Record<number, number>>({})
+    const loadingMoreRef = useRef(false)
+    const preserveScrollRef = useRef(false)
+    const restoreScrollTopRef = useRef<number | null>(null)
+    const initialScrollDoneRef = useRef(false)
     const sendReadRef = useRef<() => void>(() => { })
 
     const convId = conversation?.id ?? null
 
+    const messages = convId ? (messagesMap[convId] ?? []) : []
+    const hasMore = convId ? (hasMoreMap[convId] ?? true) : false
+
+    const setMessages = useCallback((updater: Message[] | ((prev: Message[]) => Message[])) => {
+        if (!convId) return;
+        setMessagesMap(prev => {
+            const oldList = prev[convId] || [];
+            const newList = typeof updater === "function" ? updater(oldList) : updater;
+            return { ...prev, [convId]: newList };
+        });
+    }, [convId]);
+
+    const offsetRef = {
+        get current() { return convId ? (offsetsCacheRef.current[convId] ?? 0) : 0 },
+        set current(val) { if (convId) offsetsCacheRef.current[convId] = val }
+    }
+
     // load messages
-    async function loadMessages(convId: number, reset = false) {
+    async function loadMessages(convId: number, reset = false, skipOverride?: number, dontUpdateOffset = false) {
+        if (loadingMoreRef.current) return;
+        loadingMoreRef.current = true
         setLoadingMsgs(true)
         try {
-            const skip = reset ? 0 : pageRef.current * 50
-            const msgs = await getMessages(convId, skip, 50)
+            const skip = reset ? 0 : (skipOverride ?? offsetRef.current)
+            const msgs = await getMessages(convId, skip, PAGE_SIZE)
             if (reset) {
                 setMessages(msgs)
-                pageRef.current = 1
+                if (!dontUpdateOffset) offsetRef.current = msgs.length
             } else {
-                setMessages((prev) => [...msgs, ...prev])
-                pageRef.current += 1
+                preserveScrollRef.current = true
+                if (!dontUpdateOffset) offsetRef.current = skip + msgs.length
+                setMessages((prev) => mergeUniqueMessages(prev, msgs))
             }
-            setHasMore(msgs.length === 50)
-        } catch { }
+            setHasMoreMap(prev => ({ ...prev, [convId]: msgs.length === PAGE_SIZE }))
+        } catch (err) {
+            console.error("Error in loading", err)
+        }
         finally {
+            loadingMoreRef.current = false
             setLoadingMsgs(false)
         }
     }
 
     useEffect(() => {
         if (!convId) return;
-        setMessages([])
         setTypingUsers([])
         setShowAiPanel(false)
         setTranslatedMap({})
-        pageRef.current = 0
+        loadingMoreRef.current = false
+        initialScrollDoneRef.current = false
     }, [convId, token])
+
+    useEffect(() => {
+        // If the signaled conversation ID matches our current view
+        if (onExternalRead && onExternalRead === convId) {
+            handleRead(convId, 0);
+        }
+    }, [onExternalRead, convId]);
 
     useEffect(() => {
         if (!convId || !token) return;
+        if (messagesMap[convId] && messagesMap[convId].length > 0) {
+            loadMessages(convId, false, 0, true);
+            return;
+        }
         loadMessages(convId, true)
     }, [convId, token])
 
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    useLayoutEffect(() => {
+        const container = messagesContainerRef.current
+        if (!container) return;
+        if (preserveScrollRef.current) {
+            if (restoreScrollTopRef.current !== null) {
+                container.scrollTop = restoreScrollTopRef.current
+                restoreScrollTopRef.current = null
+            }
+            preserveScrollRef.current = false
+            return;
+        }
+        if (!initialScrollDoneRef.current) {
+            container.scrollTop = container.scrollHeight
+            initialScrollDoneRef.current = true
+            return;
+        }
+        container.scrollTop = container.scrollHeight
     }, [messages])
 
     // Websocket callbacks
@@ -317,7 +378,7 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
             markAsRead(msg.conversation_id).catch(() => { })
             setMessages((prev) => prev.map((m) => (m.status === "delivered" ? { ...m, status: "read" } : m)))
         }
-    }, [onIncomingMessage, convId, currentUser?.id])
+    }, [onIncomingMessage, convId, currentUser?.id, setMessages])
 
     const handleTyping = useCallback((user_id: number, full_name: string, is_typing: boolean) => {
         setTypingUsers((prev) =>
@@ -332,7 +393,7 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
                 ? { ...m, status: "read" as const }
                 : m))
         )
-    }, [])
+    }, [setMessages])
 
     const handleUserJoined = useCallback((_uid: number, fullName: string) => {
         const sys: Message = {
@@ -347,7 +408,7 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
             sender: { id: 0, email: "system" }
         } as unknown as Message
         setMessages((prev) => [...prev, sys])
-    }, [convId])
+    }, [convId, setMessages])
 
     const handleUserLeft = useCallback((_uid: number, fullName: string) => {
         const sys: Message = {
@@ -362,7 +423,7 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
             sender: { id: 0, email: "system" }
         } as unknown as Message
         setMessages((prev) => [...prev, sys])
-    }, [convId])
+    }, [convId, setMessages])
 
     const { connected, sendMessage, sendTyping, sendRead } = useWebSocket({
         conversation_id: convId,
@@ -475,7 +536,7 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
     async function handleDelete(msgId: number) {
         try {
             await deleteMessage(msgId)
-            setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, is_deleted: true } : m))
+            setMessages((prev) => prev.filter((m) => m.id !== msgId))
         }
         catch { }
     }
@@ -494,14 +555,18 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
     // Load more (scroll to top)
     async function handleLoadMore() {
         if (!convId || loadingMsgs || !hasMore) return;
-        const prevHeight = messagesTopRef.current?.parentElement?.scrollHeight ?? 0;
-        await loadMessages(convId)
+        const container = messagesContainerRef.current
+        if (!container) return;
+        const prevScrollHeight = container.scrollHeight;
+        preserveScrollRef.current = true
+        restoreScrollTopRef.current = 0
+        await loadMessages(convId, false, offsetRef.current)
 
-        // Restore scroll position
-        const el = messagesTopRef.current?.parentElement;
-        if (el) {
-            el.scrollTop = el.scrollHeight - prevHeight;
-        }
+        requestAnimationFrame(() => {
+            if (!messagesContainerRef.current) return;
+            const added = messagesContainerRef.current.scrollHeight - prevScrollHeight
+            messagesContainerRef.current.scrollTop = added > 0 ? added : 0
+        })
     }
 
     // Derived
@@ -560,16 +625,11 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
                                 {conversation.other_user.is_online
                                     ? "online"
                                     : conversation.other_user.last_seen
-                                        ? `last seen ${new Date(conversation.other_user.last_seen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                                        ? `last seen ${new Date(conversation.other_user.last_seen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "2-digit", hour12: true })}`
                                         : "offline"}
                             </p>
                         )}
                     </div>
-                    {/* Connection dot */}
-                    <div
-                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${connected ? "bg-emerald-400" : "bg-[#ff4d6d] animate-pulse"}`}
-                        title={connected ? "Connected" : "Reconnecting…"}
-                    />
 
                     {/* AI button */}
                     <button
@@ -582,9 +642,10 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
                     </button>
                 </header>
                 {/* Messages */}
-                <div className="flex-1 overflow-y-auto" onScroll={(e) => {
-                    if ((e.target as HTMLDivElement).scrollTop < 80) handleLoadMore();
-                }}>
+                <div
+                    ref={messagesContainerRef}
+                    className="flex-1 overflow-y-auto"
+                >
                     <div ref={messagesTopRef} />
 
                     {loadingMsgs && messages.length === 0 && (
@@ -594,14 +655,14 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
                         </div>
                     )}
 
-                    {hasMore && messages.length > 0 && (
-                        <div className="flex justify-center py-3">
+                    {(hasMore || loadingMsgs) && messages.length > 0 && (
+                        <div className="sticky top-0 z-10 flex justify-center py-3 bg-[#080c10]">
                             <button
                                 onClick={handleLoadMore}
                                 disabled={loadingMsgs}
                                 className="text-[11px] text-[#4a6070] font-mono hover:text-cyan-400 transition-colors disabled:opacity-40"
                             >
-                                {loadingMsgs ? "Loading…" : "↑ Load earlier messages"}
+                                {loadingMsgs ? "Loading earlier messages…" : "↑ Load earlier messages"}
                             </button>
                         </div>
                     )}
@@ -656,6 +717,7 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
                         {uploading && (
                             <div className="mb-2 flex items-center gap-2">
                                 <div className="flex-1 h-1 bg-[#1e2a35] rounded-full overflow-hidden">
+
                                     <div
                                         className="h-full bg-cyan-400 rounded-full transition-all"
                                         style={{ width: `${uploadProgress}%` }}
@@ -747,5 +809,3 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
     )
 
 }
-
-

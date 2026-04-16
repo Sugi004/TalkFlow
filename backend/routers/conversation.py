@@ -8,16 +8,24 @@ from schemas import UserResponse, UserSearch
 from auth import get_current_user
 from limiter import limiter
 from models import Conversation, Participants, Message                                              
-from schemas import ConversationResponse, MessageResponse, ParticipantResponse, ParticipantCreate, DirectConversationCreate, GroupConversationCreate
+from schemas import ConversationResponse, MessageResponse, ParticipantResponse, ParticipantCreate, DirectConversationCreate, GroupConversationCreate, ConversationListItem
 from redis_client import get_unread_count, is_user_online
 
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 # Get ALL conversations
-@router.get("/", response_model=list[ConversationResponse])
+@router.get("/", response_model=list[ConversationListItem])
 async def get_conversations(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Conversation).join(Participants).where(Participants.user_id == current_user.id).distinct().order_by(Conversation.updated_at.desc()))
+    result = await db.execute(
+        select(Conversation)
+        .join(Participants, and_(
+            Participants.conversation_id == Conversation.id, 
+            Participants.user_id == current_user.id,
+            Participants.is_hidden == False
+            ))
+        .distinct()
+        .order_by(Conversation.updated_at.desc()))
     conversations = result.scalars().all()
     response = []
     for conversation in conversations:
@@ -36,11 +44,7 @@ async def get_conversations(current_user: User = Depends(get_current_user), db: 
         # for 1-1 conversation
         other_user = None
         other_user_online = False
-        # if not conversation.is_group:
-        #     other_user = next((p for p in participant_users if p.id != current_user.id), None)
-        #     if other_user:
-        #         other_user_online = await is_user_online(other_user.id)
-        
+
         if not conversation.is_group and len(participant_users) == 2:
             other_user = next((p for p in participant_users if p.id != current_user.id), None)
             if other_user:
@@ -63,7 +67,6 @@ async def get_conversations(current_user: User = Depends(get_current_user), db: 
                 file_url=last_message.file_url,
                 status=last_message.status,
                 language=last_message.language,
-                expires_at=last_message.expires_at,
                 is_deleted=last_message.is_deleted,
                 created_at=last_message.created_at,
                 updated_at=last_message.updated_at,
@@ -75,31 +78,33 @@ async def get_conversations(current_user: User = Depends(get_current_user), db: 
                 ) if sender else None
             )
         response.append(
-            ConversationResponse(
+            ConversationListItem(
                 id=conversation.id,
                 is_group=conversation.is_group,
                 group_name=conversation.group_name,
                 group_avatar_url=conversation.group_avatar_url,
                 created_by=conversation.created_by,
-                other_user=UserSearch(
+                other_user=UserResponse(
                     id=other_user.id,
                     email=other_user.email,
                     full_name=other_user.full_name,
                     avatar_url=other_user.avatar_url,
                     is_online=other_user_online,
                     last_seen=other_user.last_seen,
-
-                    
+                    created_at=other_user.created_at,
+                    updated_at=other_user.updated_at
                     ) if other_user else None,
                     
                 last_message=last_message_response,
                 last_message_at=last_message.created_at if last_message else None,
-                unread_count=get_unread_count(current_user.id, conversation.id),
-                participants=[UserSearch(
+                unread_count=await get_unread_count(current_user.id, conversation.id),
+                participants=[UserResponse(
                     id=u.id,
                     email=u.email,
                     full_name=u.full_name,
-                    avatar_url=u.avatar_url
+                    avatar_url=u.avatar_url,
+                    created_at=u.created_at,
+                    updated_at=u.updated_at
                 ) for u in participant_users],
                 created_at=conversation.created_at,
                 updated_at=conversation.updated_at
@@ -192,7 +197,7 @@ async def create_direct_conversation(data:DirectConversationCreate, current_user
             full_name=other_user.full_name,
             avatar_url=other_user.avatar_url,
             last_seen=other_user.last_seen,
-            is_online=is_user_online(other_user.id),
+            is_online=await is_user_online(other_user.id),
             created_at=other_user.created_at,
             updated_at=other_user.updated_at
         )   ,
@@ -231,7 +236,7 @@ async def create_group_conversation(data:GroupConversationCreate, current_user: 
     db.add(new_conversation)
     await db.flush() # get id without commit
 
-#     Add user as participant and admin
+    # Add user as participant and admin
     db.add(Participants(conversation_id=new_conversation.id, user_id=current_user.id, is_admin=True))
 
     # Add other participants
@@ -268,7 +273,7 @@ async def create_group_conversation(data:GroupConversationCreate, current_user: 
         updated_at=new_conversation.updated_at
     )
 
-#  Get Single conversation
+# Get Single conversation
 
 @router.get("/{conversation_id}", response_model=ConversationResponse)
 async def get_conversation(conversation_id: int, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
@@ -356,6 +361,7 @@ async def add_participant(conversation_id: int, data: ParticipantCreate, current
         is_admin=False
     )
     db.add(new_participant)
+
     await db.commit()
     await db.refresh(new_participant)
     
@@ -395,14 +401,9 @@ async def leave_or_delete_conversation(conversation_id: int, current_user: User 
     if conversation.is_group:
         # Anyone can leave a group
         await db.delete(participant)
-        await db.commit()
-        return {"message": "You have left the group"}
     else:
-        # Direct conversation — delete everything for both users
-        await db.execute(delete(Message).where(Message.conversation_id == conversation_id))
-        await db.execute(delete(Participants).where(Participants.conversation_id == conversation_id))
-        await db.execute(delete(Conversation).where(Conversation.id == conversation_id))
-        await db.commit()
-        return {"message": "Conversation deleted successfully"}
-    
+        participant.is_hidden = True
+
+    await db.commit()
+    return {"message": "Left conversation"}    
     

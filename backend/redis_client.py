@@ -7,9 +7,8 @@ load_dotenv()
 redis_client = Redis(
     host=os.getenv("REDIS_HOST", "localhost"),
     port=int(os.getenv("REDIS_PORT", 6379)),
-    password=os.getenv("REDIS_PASSWORD"),
+    password=os.getenv("REDIS_PASSWORD") or None,
     decode_responses=True
-    
 )
 
 async def get_redis_client():
@@ -26,9 +25,25 @@ async def is_user_online(user_id: int) -> bool:
     result = await redis_client.get(f"user:{user_id}:online")
     return result is not None
 
+# Connection reference counter — tracks how many active WS connections the user has.
+# A user is truly offline only when this reaches 0.
+async def increment_connection_count(user_id: int) -> int:
+    key = f"user:{user_id}:conn_count"
+    count = await redis_client.incr(key)
+    # No expiry — managed explicitly on disconnect
+    return count
+
+async def decrement_connection_count(user_id: int) -> int:
+    key = f"user:{user_id}:conn_count"
+    count = await redis_client.decr(key)
+    if count <= 0:
+        await redis_client.delete(key)
+        return 0
+    return count
+
 #  Typing indicator
 async def set_typing(conversation_id: int, user_id: int):
-    await redis_client.set(f"typing:{conversation_id}:{user_id}", 1, ex=60)
+    await redis_client.set(f"typing:{conversation_id}:{user_id}", 1, ex=30)
 
 async def clear_typing(conversation_id: int, user_id: int):
     await redis_client.delete(f"typing:{conversation_id}:{user_id}")
@@ -38,9 +53,9 @@ async def set_message_status(conversation_id: int, message_id: int, status: str)
     await redis_client.hset(f"message_status:{conversation_id}", str(message_id), status)
    
 
-async def get_message_status(conversation_id: int, message_id: int) -> str:
+async def get_message_status(conversation_id: int, message_id: int) -> str | None:
     status = await redis_client.hget(f"message_status:{conversation_id}", str(message_id))
-    return status or "sent"
+    return status or None
 
 async def get_all_message_status(conversation_id: int) -> dict:
     return await redis_client.hgetall(f"message_status:{conversation_id}")
@@ -71,9 +86,9 @@ async def increment_unread_count(conversation_id: int, user_id: int):
 async def get_unread_counts(user_id: int) -> dict:
     return await redis_client.hgetall(f"unread_count:{user_id}")
 
-async def reset_unread_count(conversation_id: int, user_id: int):
+async def reset_unread_count(user_id: int, conversation_id: int):
     await redis_client.hset(f"unread_count:{user_id}", str(conversation_id), 0)
     
-async def get_unread_count(conversation_id: int, user_id: int) -> int:
+async def get_unread_count(user_id: int, conversation_id: int) -> int:
     return int(await redis_client.hget(f"unread_count:{user_id}", str(conversation_id)) or 0)
 

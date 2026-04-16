@@ -18,6 +18,7 @@ export default function ChatPage() {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [showLeaveModal, setShowLeaveModal] = useState(false);
     const [pendingLeave, setPendingLeave] = useState(false);
+    const [lastReadConvId, setLastReadConvId] = useState<number | null>(null);
 
     const {
         conversations,
@@ -63,15 +64,32 @@ export default function ChatPage() {
 
     // Global socket for real-time updates
     useGlobalSocket({
+
         user_id: currentUser?.id ?? null,
         token,
         onMessage: (msg) => {
             // If message is for active conversation, ChatWindow handles it
             // If not, update conversation list unread count
-            if (msg.conversation_id !== activeConv?.id) {
-                handleIncomingMessage(msg, activeConv?.id ?? null);
-            }
 
+            console.log("GlobalSocket onMessage →", msg.conversation_id, "activeConv →", activeConv?.id)
+            if (msg.conversation_id !== activeConv?.id && msg.sender.id !== currentUser?.id) {
+
+                console.log("GlobalSocket onMessage →", msg.conversation_id, "activeConv →", activeConv?.id)
+
+                handleIncomingMessage(msg, activeConv?.id ?? null);
+
+            }
+        },
+        onPresence: updatePresence,
+        onRead: (conversation_id, read_by) => {
+            // Update unread count in Sidebar/Chatlist
+            clearUnread(conversation_id);
+            // If it's the active conversation, signal ChatWindow to update ticks
+            if (conversation_id === activeConv?.id) {
+                setLastReadConvId(conversation_id);
+                // Reset signal after a short delay to allow re-triggering
+                setTimeout(() => setLastReadConvId(null), 100);
+            }
         }
     })
 
@@ -169,6 +187,7 @@ export default function ChatPage() {
                     onIncomingMessage={(msg: any) => handleIncomingMessage(msg, activeConv?.id ?? null)}
                     onPresence={updatePresence}
                     onDelete={handleDeleteConversation}
+                    onExternalRead={lastReadConvId}
                 />
                 {showLeaveModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">

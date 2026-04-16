@@ -68,7 +68,10 @@ export function useWebSocket({
                     break;
                 case "typing":
                     if (event.user_id !== undefined && event.full_name !== undefined){
-                        onTypingRef.current(Number(event.user_id), event.full_name, event.is_typing ?? false);
+                        onTypingRef.current(
+                            Number(event.user_id), 
+                            event.full_name, 
+                            event.is_typing ?? false);
                     }
                     break;
                 case "presence":
@@ -81,9 +84,9 @@ export function useWebSocket({
                         );
                     }
                     break;
-                case "read":
+                case "read": 
                     if(event.conversation_id !== undefined && event.read_by !== undefined){
-                        onReadRef.current(Number(event.conversation_id), Number(event.read_by));
+                        onReadRef.current?.(Number(event.conversation_id), Number(event.read_by));
                     }
                     break;
                 case "user_joined":
@@ -118,12 +121,15 @@ export function useWebSocket({
             if(wsRef.current !== ws) return;
             if(!isMounted.current) return;
             setConnected(false);
-            if(retryCount.current < 5){
-                retryCount.current++;
-                const delay = Math.min(1000 * Math.pow(2, retryCount.current - 1), 30000);
-                retryTimeout.current = setTimeout(() => {
-                    connect();
-                }, delay);
+            // Only retry if it wasn't a clean close
+            if (e.code !== 1000 && e.code !== 1001) {
+                if(retryCount.current < 5){
+                    retryCount.current++;
+                    const delay = Math.min(1000 * Math.pow(2, retryCount.current - 1), 30000);
+                    retryTimeout.current = setTimeout(() => {
+                        connect();
+                    }, delay);
+                }
             }
         };
 

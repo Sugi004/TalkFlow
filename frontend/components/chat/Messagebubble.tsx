@@ -78,22 +78,6 @@ function MediaContent({ msg }: { msg: Message }) {
 
 }
 
-// Disappearing message countdown
-
-function ExpiryBadge({ expiresAt }: { expiresAt: string }) {
-    const ms = new Date(expiresAt).getTime() - Date.now();
-    const mins = Math.max(0, Math.floor(ms / 60000));
-    const secs = Math.max(0, Math.floor((ms % 60000) / 1000));
-    if (ms <= 0) return (
-        <span className="text-[10px] text-red-400 font-mono ml-1">⏳ EXPIRED</span>
-    );
-    return (
-        <span className="text-[10px] text-orange-400 font-mono ml-1">
-            ⏳  {mins > 0 ? `${mins}m` : `${secs}s`}
-        </span>
-    );
-
-}
 
 // Main componenet
 export default function MessageBubble({ message, isOwn, grouped, onDelete, onTranslate, translatedContent }: MessageBubbleProps) {
@@ -134,11 +118,6 @@ export default function MessageBubble({ message, isOwn, grouped, onDelete, onTra
                             <span className={`text-[12.5px] font-semibold font-mono ${isOwn ? "text-cyan-400" : "text-[#c9d8e8]"}`}>
                                 {isOwn ? "you" : senderName}
                             </span>
-                            <span className="text-[10px] text-[#3a4a55] font-mono">
-                                {formatTime(message.created_at)}
-                            </span>
-                            {message.expires_at && <ExpiryBadge expiresAt={message.expires_at} />}
-                            {isOwn && <StatusIcon status={message.status} />}
                         </div>
                     )}
 
@@ -153,6 +132,7 @@ export default function MessageBubble({ message, isOwn, grouped, onDelete, onTra
                                         ? "bg-cyan-400/20 text-cyan-100 rounded-tr-sm"
                                         : "bg-[#0d1117] border border-[#1e2a35] text-[#c9d8e8] rounded-tl-sm"
                                     }`}>
+
                                     {translatedContent ?? message.content}
                                     {translatedContent && (
                                         <span className="ml-2 text-[9px] text-amber-400 font-mono">[translated]</span>
@@ -162,6 +142,15 @@ export default function MessageBubble({ message, isOwn, grouped, onDelete, onTra
                             <MediaContent msg={message} />
                         </>
                     )}
+                    <div className="flex items-center gap-1 mt-0.5">
+                        <span className="text-[9.5px] text-[#3a4a55] font-mono">
+                            {formatTime(message.created_at)}
+                        </span>
+
+                        {isOwn && (
+                            <span><StatusIcon status={message.status} /></span>
+                        )}
+                    </div>
                 </div>
 
                 {/* Context menu — flip side for own messages */}
@@ -174,7 +163,7 @@ export default function MessageBubble({ message, isOwn, grouped, onDelete, onTra
                                 title="Translate"
                             >🌐</button>
                         )}
-                        {isOwn && onDelete && (
+                        {onDelete && (
                             <button
                                 onClick={() => onDelete(message.id)}
                                 className="w-7 h-7 flex items-center justify-center rounded text-[#4a6070] hover:text-[#ff4d6d] hover:bg-[#1a2530] transition-colors text-xs"

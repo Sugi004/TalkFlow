@@ -24,7 +24,6 @@ const LANG_LABELS: Record<string, string> = {
     graphql: "GraphQL",
 };
 
-// Languages shiki supports — fallback to "text" if not in this list
 const SHIKI_LANGS = new Set([
     "javascript", "js", "typescript", "ts", "tsx", "jsx",
     "python", "py", "go", "rust", "rs", "java", "c", "cpp", "cs",

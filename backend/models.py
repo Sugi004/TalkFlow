@@ -22,7 +22,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     full_name = Column(String, nullable=True)
     avatar_url = Column(String, nullable=True)
-    last_seen = Column(DateTime, nullable=True)
+    last_seen = Column(DateTime(timezone=True), nullable=True, server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
@@ -53,6 +53,8 @@ class Participants(Base):
     is_admin = Column(Boolean, default=False, nullable=False)
     user = relationship("User", back_populates="participants")
     conversation = relationship("Conversation", back_populates="participants")
+    is_hidden = Column(Boolean, default=False, nullable=False)
+    # unread_count = Column(Integer, default=0, nullable=False)
 
 class MessageStatus(str, enum.Enum):
     sent = "sent"
@@ -69,7 +71,6 @@ class Message(Base):
     message_type = Column(Enum(MessageType),default=MessageType.text, nullable=False)
     file_url = Column(String, nullable=True)
     language = Column(String, nullable=True)
-    expires_at = Column(DateTime(timezone=True), nullable=True)
     is_deleted = Column(Boolean, default=False, nullable=False)
     status = Column(Enum(MessageStatus), default=MessageStatus.sent, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

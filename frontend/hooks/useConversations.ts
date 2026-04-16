@@ -19,13 +19,17 @@ export const useConversations = () =>  {
     const [error, setError] = useState<string | null>(null);
     
     function normalize(conv: any): Conversation {
-    return {
-        ...conv,
-        other_user: conv.is_group
-            ? null
-            : conv.participants?.find((p: any) => p.id !== currentUser?.id) ?? null,
-    };
-}
+        return {
+            ...conv,
+            // The API already returns a correct other_user with is_online from Redis.
+            // Only fall back to participants if other_user is absent (e.g. freshly created conv).
+            other_user: conv.is_group
+                ? null
+                : conv.other_user
+                    ?? conv.participants?.find((p: any) => p.id !== currentUser?.id)
+                    ?? null,
+        };
+    }
 
 
     const refresh = useCallback(async () => {
@@ -71,17 +75,22 @@ export const useConversations = () =>  {
     setConversations((prev)=>prev.map((c)=>(c.id === conversationId ? {...c, unread_count : 0} : c)));
  },[]);
 
- const updatePresence = useCallback((user_id: number, fullName: string, isOnline: boolean, lastSeen: string)=>{
-    setConversations((prev)=>prev.map((c)=>{
-        if(c.other_user && c.other_user.id === user_id){
+ const updatePresence = useCallback((user_id: number, fullName: string, isOnline: boolean, lastSeen: string) => {
+    setConversations((prev) => prev.map((c) => {
+        if (c.other_user && c.other_user.id === user_id) {
             return {
                 ...c,
-                other_user: {...c.other_user, is_online: isOnline, last_seen: isOnline ? "online" : "offline"}
-            }
+                other_user: {
+                    ...c.other_user,
+                    is_online: isOnline,
+                    // Keep the real ISO timestamp so ChatWindow can display "last seen HH:MM"
+                    last_seen: isOnline ? c.other_user.last_seen : (lastSeen || c.other_user.last_seen),
+                }
+            };
         }
         return c;
     }));
- },[]);
+ }, []);
         
  const startDirect = useCallback(async (userId: number): Promise<Conversation>=>{
     if(!currentUser?.id) throw new Error("No user logged in");

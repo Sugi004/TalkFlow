@@ -65,6 +65,7 @@ class UserResponse(BaseModel):
     full_name: Optional[str] = None
     avatar_url: Optional[str] = None
     last_seen: Optional[datetime] = None
+    is_online: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -95,7 +96,7 @@ class MessageResponse(BaseModel):
     language: Optional[str] = None
     expires_at: Optional[datetime] = None
     is_deleted: bool
-    status: MessageStatus
+    status: MessageStatus 
     created_at: datetime
     updated_at: datetime
 
@@ -179,6 +180,7 @@ class WSTyping(BaseModel):
 class PresignedUrlRequest(BaseModel):
     file_name: str
     content_type: str
+    file_size: int
     
 class PresignedUrlResponse(BaseModel):
     upload_url: str

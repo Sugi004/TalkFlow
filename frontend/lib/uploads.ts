@@ -1,8 +1,8 @@
 import api from "./axios";
 import {PresignedResponse} from "@/types";
 
-export const getPresignedUrl = async (filename: string, file_type: string): Promise<PresignedResponse> => {
-    const {data} = await api.post("/uploads/presigned-url", {filename, content_type: file_type});
+export const getPresignedUrl = async (file_name: string, file_type: string, file_size: number): Promise<PresignedResponse> => {
+    const {data} = await api.post("/uploads/presigned-url", {file_name, content_type: file_type, file_size});
     return data;
 }
 
@@ -13,7 +13,7 @@ export const getPresignedUrl = async (filename: string, file_type: string): Prom
  **/
 
 export const uploadFile = async (file: File, onProgress?: (p: number) => void): Promise<string> => {
-    const {upload_url, file_url} = await getPresignedUrl(file.name, file.type);
+    const {upload_url, file_url} = await getPresignedUrl(file.name, file.type, file.size);
     await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open("PUT", upload_url);

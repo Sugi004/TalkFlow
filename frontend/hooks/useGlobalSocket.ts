@@ -6,70 +6,93 @@ import { Message } from "@/types"
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws";
 
 export function useGlobalSocket({
-    user_id ,
+    user_id,
     token,
-    onMessage
-}:{
+    onMessage,
+    onPresence,
+    onRead
+}: {
     user_id: number | null;
     token: string | null;
-    onMessage: (msg: Message) => void
-}){
+    onMessage: (msg: Message) => void;
+    onPresence?: (user_id: number, full_name: string, is_online: boolean, last_seen: string) => void;
+    onRead?: (conversation_id: number, read_by: number) => void;
+}) {
     const wsRef = useRef<WebSocket | null>(null);
     const retryTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const retryCount = useRef(0)
-    const onMessageRef = useRef(onMessage)
+    const retryCount = useRef(0);
+    const isMounted = useRef(true);
 
-
+    // Always-fresh refs — updated every render so closures never go stale
+    const onMessageRef = useRef(onMessage);
+    const onPresenceRef = useRef(onPresence);
+    const onReadRef = useRef(onRead);
     useEffect(() => {
-        onMessageRef.current = onMessage
-    }, [])
+        onMessageRef.current = onMessage;
+        onPresenceRef.current = onPresence;
+        onReadRef.current = onRead;
+    });
 
     const connect = useCallback(() => {
-        if(!user_id || !token) return;
+        if (!user_id || !token || !isMounted.current) return;
+        const url = `${WS_URL}/user/${user_id}?token=${token}`;
+        const ws = new WebSocket(url);
+        wsRef.current = ws;
 
-        const url = `${WS_URL}/user/${user_id}?token=${token}`
-        const ws = new WebSocket(url)
-        wsRef.current = ws
-        
-        ws.onmessage=(e)=>{
-            try{
-                const msg = JSON.parse(e.data)
-                if(msg.type === "message"){
-                    onMessageRef.current(msg as Message)
+        ws.onmessage = (e) => {
+            if (!isMounted.current) return;
+            try {
+                const event = JSON.parse(e.data);
+                if (event.type === "message") {
+                    onMessageRef.current(event as Message);
+                } else if (event.type === "presence") {
+                    onPresenceRef.current?.(
+                        Number(event.user_id),
+                        event.full_name ?? "",
+                        event.is_online ?? false,
+                        event.last_seen ?? ""
+                    );
+                } else if (event.type === "read") {
+                    onReadRef.current?.(Number(event.conversation_id), Number(event.read_by));
                 }
-            }catch {}
-        }   
+            } catch {}
+        };
 
-        ws.onclose=()=>{
-          if(wsRef.current !== ws) return;
-          if(retryCount.current <5){
-            retryCount.current++
-            const delay = Math.min(1000 * Math.pow(2, retryCount.current - 1), 30000)
-            retryTimeout.current = setTimeout(() => {
-                connect()
-            }, delay)
-          }    
-        }
+        ws.onclose = () => {
+            if (wsRef.current !== ws) return;
+            if (!isMounted.current) return;
+            if (retryCount.current < 5) {
+                retryCount.current++;
+                const delay = Math.min(1000 * Math.pow(2, retryCount.current - 1), 30000);
+                retryTimeout.current = setTimeout(() => {
+                    connect();
+                }, delay);
+            }
+        };
 
-        ws.onerror=()=>{
-            ws.close()
-        }
-    },[user_id, token])
+        ws.onerror = () => ws.close();
+    }, [user_id, token]);
 
     useEffect(() => {
-        if(retryTimeout.current){
-            clearTimeout(retryTimeout.current)
-        }
-        wsRef.current?.close()
-        retryCount.current =   0
-        connect()
-        return ()=>{
-            if(retryTimeout.current) clearTimeout(retryTimeout.current)
-            wsRef.current?.close()
-        }
-    },[connect])
+        isMounted.current = true;
+        if (retryTimeout.current) clearTimeout(retryTimeout.current);
+        wsRef.current?.close();
+        retryCount.current = 0;
+        connect();
+        return () => {
+            isMounted.current = false;
+            if (retryTimeout.current) clearTimeout(retryTimeout.current);
+            wsRef.current?.close();
+        };
+    }, [connect]);
 
-    
-
-
+    // Heartbeat — keeps proxy-idle connections alive
+    useEffect(() => {
+        const interval = setInterval(() => {
+            if (wsRef.current?.readyState === WebSocket.OPEN) {
+                wsRef.current.send(JSON.stringify({ type: "ping" }));
+            }
+        }, 25_000);
+        return () => clearInterval(interval);
+    }, []);
 }

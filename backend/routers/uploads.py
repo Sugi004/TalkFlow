@@ -8,8 +8,6 @@ from dotenv import load_dotenv
 from schemas import PresignedUrlRequest, PresignedUrlResponse
 load_dotenv()
 
-
-
 router = APIRouter(prefix="/uploads", tags=["Uploads"])
 
 s3_client = boto3.client(

@@ -1,3 +1,13 @@
+
+export enum MessageStatus {
+    SENT = "sent",
+    DELIVERED = "delivered",
+    READ = "read",
+    FAILED = "failed",
+}
+
+
+
 export interface User {
     id: number;
     email: string;
@@ -5,6 +15,15 @@ export interface User {
     avatar_url: string;
     last_seen: string;
     is_online: boolean;
+}
+
+export interface AuthContextType {
+    token: string | null;
+    isAuthenticated: boolean;
+    login: (token: string) => void;
+    logout: () => void;
+    currentUser: User | null;
+    refreshUser: () => void;
 }
 
 export interface Conversation {
@@ -30,7 +49,7 @@ export interface Message {
     language?: string;
     expires_at?: string;
     is_deleted: boolean;
-    status: "sent" | "delivered" | "read";
+    status: "sent" | "delivered" | "read" | "failed";
     created_at: string;
     updated_at: string;
     sender: User;
@@ -90,7 +109,6 @@ export interface UseWebSocketOptions {
 // Derived type aliases
 
 export type MessageType   = Message["message_type"];
-export type MessageStatus = Message["status"];
 export type WSEventType   = WSMessage["type"];
 
 // Websocket outgoing frames
@@ -127,9 +145,7 @@ export interface ChatListProps{
     onNewGroup: (name: string, participantIds: number[]) => void;
     onLeave: (conversationId: number) => void;
     onSignOut: () => void;
-    onDelete: (conversationId: number) => void;
-
-    
+    onDelete: (conversationId: number) => void; 
 }
 
 export interface ChatWindowProps{
@@ -139,6 +155,7 @@ export interface ChatWindowProps{
     onPresence:(userId: number, fullName: string, isOnline: boolean, lastSeen: string) => void;
     onIncomingMessage:(message: Message) => void;
     onDelete: (conversationId: number) => void;
+    onExternalRead?: number | null;
     
 }
 

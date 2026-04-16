@@ -3,18 +3,15 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { User } from "@/types";
 import api from "@/lib/axios";
+import { useRouter } from "next/navigation";
+import { AuthContextType } from "@/types";
 
-interface AuthContextType {
-    token: string | null;
-    isAuthenticated: boolean;
-    login: (token: string) => void;
-    logout: () => void;
-    currentUser: User | null;
-}
+
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+    const router = useRouter();
     const [token, setToken] = useState<string | null>(() => {
         if (typeof window !== "undefined") {
             return sessionStorage.getItem("token");
@@ -48,8 +45,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setCurrentUser(null);
     }, []);
 
+    const refreshUser = useCallback(() => {
+        if (!token) {
+            setCurrentUser(null);
+            router.push("/login");
+            return;
+        }
+        api.get("/users/me").then((res) => {
+            setCurrentUser(res.data)
+        }).catch(() => {
+            setCurrentUser(null)
+        })
+    }, [token])
+
     return (
-        <AuthContext.Provider value={{ token, isAuthenticated: !!token, currentUser, login, logout }}>
+        <AuthContext.Provider value={{ token, isAuthenticated: !!token, currentUser, login, logout, refreshUser }}>
             {children}
         </AuthContext.Provider>
     );

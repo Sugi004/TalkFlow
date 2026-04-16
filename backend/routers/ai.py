@@ -83,7 +83,6 @@ async def suggest_replies(
             detail="No messages to reply to"
         )
 
-    
     #  Call gemini API
     response = model.generate_content(
        f"""Generate 3 very short casual reply suggestion for this message. {last_message.content}"
