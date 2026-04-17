@@ -1,9 +1,8 @@
 "use client"
 
-
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Conversation, User } from "@/types"
+import { Conversation, MembershipEvent, Message } from "@/types"
 import { useAuth } from "@/context/AuthContext"
 import { useConversations } from "@/hooks/useConversations"
 import { markAsRead } from "@/lib/messages"
@@ -14,16 +13,15 @@ import { useGlobalSocket } from "@/hooks/useGlobalSocket"
 export default function ChatPage() {
     const router = useRouter();
     const { isAuthenticated, logout, token, currentUser } = useAuth();
-    const [activeConv, setActiveConv] = useState<Conversation | null>(null);
+    const [activeConvId, setActiveConvId] = useState<number | null>(null);
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [showLeaveModal, setShowLeaveModal] = useState(false);
-    const [pendingLeave, setPendingLeave] = useState(false);
     const [lastReadConvId, setLastReadConvId] = useState<number | null>(null);
+    const [externalMessage, setExternalMessage] = useState<Message | null>(null);
 
     const {
         conversations,
         loading,
-        error,
         refresh,
         handleIncomingMessage,
         clearUnread,
@@ -33,6 +31,7 @@ export default function ChatPage() {
         leaveConversation,
         deleteDirectConversation,
     } = useConversations();
+    const activeConv = conversations.find((conversation) => conversation.id === activeConvId) ?? null;
 
     // Auth guard
 
@@ -41,26 +40,19 @@ export default function ChatPage() {
             router.push("/login");
             return
         }
-    }, [isAuthenticated]);
+    }, [isAuthenticated, router]);
 
     // Protect accidental closure
     useEffect(() => {
         const handlePopState = (e: PopStateEvent) => {
+            e.preventDefault();
             window.history.pushState(null, "", window.location.href);
             setShowLeaveModal(true);
-            setPendingLeave(true);
         };
         window.history.pushState(null, "", window.location.href);
         window.addEventListener("popstate", handlePopState);
         return () => window.removeEventListener("popstate", handlePopState);
     }, []);
-
-    // Fetch status
-    useEffect(() => {
-        if (!activeConv) return;
-        const updated = conversations.find((c) => c.id === activeConv.id);
-        if (updated) setActiveConv(updated);
-    }, [conversations]);
 
     // Global socket for real-time updates
     useGlobalSocket({
@@ -68,41 +60,46 @@ export default function ChatPage() {
         user_id: currentUser?.id ?? null,
         token,
         onMessage: (msg) => {
-            // If message is for active conversation, ChatWindow handles it
-            // If not, update conversation list unread count
-
-            console.log("GlobalSocket onMessage →", msg.conversation_id, "activeConv →", activeConv?.id)
-            if (msg.conversation_id !== activeConv?.id && msg.sender.id !== currentUser?.id) {
-
-                console.log("GlobalSocket onMessage →", msg.conversation_id, "activeConv →", activeConv?.id)
-
-                handleIncomingMessage(msg, activeConv?.id ?? null);
-
+            if (msg.sender?.id === currentUser?.id) {
+                return;
+            }
+            handleIncomingMessage(msg, activeConvId);
+            if (msg.conversation_id === activeConvId) {
+                setExternalMessage(msg);
             }
         },
         onPresence: updatePresence,
-        onRead: (conversation_id, read_by) => {
+        onRead: (conversation_id) => {
             // Update unread count in Sidebar/Chatlist
             clearUnread(conversation_id);
             // If it's the active conversation, signal ChatWindow to update ticks
-            if (conversation_id === activeConv?.id) {
+            if (conversation_id === activeConvId) {
                 setLastReadConvId(conversation_id);
                 // Reset signal after a short delay to allow re-triggering
                 setTimeout(() => setLastReadConvId(null), 100);
             }
-        }
+        },
+        onMembership: (event: MembershipEvent) => {
+            refresh().catch(() => { });
+            if (
+                event.conversation_id === activeConvId
+                && event.target_user_id === currentUser?.id
+                && (event.action === "participant_removed" || event.action === "participant_left")
+            ) {
+                setActiveConvId(null);
+                setExternalMessage(null);
+            }
+        },
     })
 
     const handleConfirmLeave = () => {
         setShowLeaveModal(false);
-        setPendingLeave(false);
-        window.removeEventListener("popstate", () => { });
         router.push("/login");
     };
     // Select conversation
 
     function selectConversation(conversation: Conversation) {
-        setActiveConv(conversation);
+        setActiveConvId(conversation.id);
         clearUnread(conversation.id);
         markAsRead(conversation.id).catch(() => { });
         // on mobile, close sidebar when selecting
@@ -125,7 +122,7 @@ export default function ChatPage() {
     async function handleDeleteConversation(conversationId: number) {
         await deleteDirectConversation(conversationId);
         if (activeConv?.id === conversationId) {
-            setActiveConv(null);
+            setActiveConvId(null);
         }
     }
 
@@ -184,17 +181,20 @@ export default function ChatPage() {
                     conversation={activeConv}
                     currentUser={currentUser}
                     token={token}
-                    onIncomingMessage={(msg: any) => handleIncomingMessage(msg, activeConv?.id ?? null)}
+                    onIncomingMessage={(msg: Message) => handleIncomingMessage(msg, activeConv?.id ?? null)}
                     onPresence={updatePresence}
                     onDelete={handleDeleteConversation}
+                    onLeaveConversation={handleLeaveConversation}
+                    onRefreshConversations={refresh}
                     onExternalRead={lastReadConvId}
+                    externalMessage={externalMessage}
                 />
                 {showLeaveModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
                         <div className="bg-[#0d1117] border border-[#1e2a35] rounded-lg p-6 w-80 shadow-2xl">
                             <h2 className="text-[14px] font-bold text-[#c9d8e8] font-mono mb-2">Leave DevChat?</h2>
                             <p className="text-[12px] text-[#4a6070] font-mono mb-6">
-                                You may miss incoming messages while you're away.
+                                You may miss incoming messages while you&apos;re away.
                             </p>
                             <div className="flex gap-3">
                                 <button
@@ -227,4 +227,3 @@ export default function ChatPage() {
     )
 
 }
-

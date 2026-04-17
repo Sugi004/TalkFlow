@@ -56,7 +56,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }).catch(() => {
             setCurrentUser(null)
         })
-    }, [token])
+    }, [router, token])
 
     return (
         <AuthContext.Provider value={{ token, isAuthenticated: !!token, currentUser, login, logout, refreshUser }}>

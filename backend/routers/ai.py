@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import and_
@@ -6,7 +6,6 @@ from database import get_db
 from auth import get_current_user
 from models import User, Message, Participants, Conversation
 from schemas import SummarizeResponse, SummarizeRequest, SmartReplyResponse, SmartReplyRequest, TranslateResponse, TranslateRequest        
-from typing import List
 import google.generativeai as genai
 import os
 from dotenv import load_dotenv
@@ -34,7 +33,18 @@ async def summarize_conversation(data: SummarizeRequest, current_user: User = De
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is not a participant in this conversation")
     
     #  Get messages
-    messages_result = await db.execute(select(Message).where(and_(Message.conversation_id == data.conversation_id, Message.is_deleted == False, Message.content != None, )).order_by(Message.created_at).limit(data.last_n_messages))
+    messages_result = await db.execute(
+        select(Message)
+        .where(
+            and_(
+                Message.conversation_id == data.conversation_id,
+                Message.is_deleted == False,
+                Message.content != None,
+            )
+        )
+        .order_by(Message.created_at.desc())
+        .limit(data.last_n_messages)
+    )
     messages = messages_result.scalars().all()
     messages = list(reversed(messages))
 

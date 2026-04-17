@@ -1,4 +1,5 @@
 "use client"
+/* eslint-disable @next/next/no-img-element */
 
 import { useState } from "react"
 import { Message, User, MessageBubbleProps } from "@/types"
@@ -21,11 +22,14 @@ function formatTime(iso: string) {
 }
 
 // Avatar
-function Avatar({ user }: { user: User | { full_name?: string; email?: string } }) {
-    const name = (user as any).full_name ?? (user as any).email ?? "?";
-    if ((user as User).avatar_url) {
+type AvatarUser = Pick<User, "full_name" | "email" | "avatar_url">;
+
+function Avatar({ user }: { user: AvatarUser }) {
+    const name = user.full_name ?? user.email ?? "?";
+
+    if (user.avatar_url) {
         return (
-            <img src={(user as User).avatar_url} alt={name} className="w-8 h-8 rounded-full object-cover shrink-0" />
+            <img src={user.avatar_url} alt={name} className="w-8 h-8 rounded-full object-cover shrink-0" />
         )
     }
     return (
@@ -82,7 +86,6 @@ function MediaContent({ msg }: { msg: Message }) {
 // Main componenet
 export default function MessageBubble({ message, isOwn, grouped, onDelete, onTranslate, translatedContent }: MessageBubbleProps) {
     const [hover, setHover] = useState(false);
-    const [showMenu, setShowMenu] = useState(false);
 
     if (message.is_deleted) {
         return (
@@ -102,7 +105,7 @@ export default function MessageBubble({ message, isOwn, grouped, onDelete, onTra
             <div
                 className={`flex gap-3 px-4 ${grouped ? "mt-0.5" : "mt-4"} ${isOwn ? "flex-row-reverse" : ""}`}
                 onMouseEnter={() => setHover(true)}
-                onMouseLeave={() => { setHover(false); setShowMenu(false); }}
+                onMouseLeave={() => { setHover(false); }}
             >
                 {/* Avatar — only show for others, not own messages */}
                 <div className="w-8 shrink-0 mt-0.5">
@@ -180,4 +183,3 @@ export default function MessageBubble({ message, isOwn, grouped, onDelete, onTra
         ;
 
 }
-

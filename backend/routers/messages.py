@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import and_, or_, update, func
+from sqlalchemy import and_, update
 from database import get_db
-from models import User, Message, Participants, Conversation, MessageStatus, MessageType
+from models import User, Message, Participants, MessageStatus
 from schemas import MessageResponse, MessageCreate, UserSearch
 from auth import get_current_user
 from typing import List
@@ -135,7 +135,6 @@ async def send_message(conversation_id: int, message: MessageCreate, current_use
         message_type=message.message_type,
         file_url=message.file_url,
         language=message.language,
-        expires_at=message.expires_at,
         status=MessageStatus.sent,
         is_deleted=False,
     )
@@ -160,7 +159,6 @@ async def send_message(conversation_id: int, message: MessageCreate, current_use
         content=new_message.content,
         file_url=new_message.file_url,
         language=new_message.language,
-        expires_at=new_message.expires_at,
         is_deleted=new_message.is_deleted,
         status="sent",
         created_at=new_message.created_at,

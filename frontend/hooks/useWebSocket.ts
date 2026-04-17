@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useRef, useState, useCallback } from "react";
-import type { UseWebSocketOptions, WSMessage, WSOutgoing, MessageType, MessageStatus, Message } from "@/types";
+import { useEffect, useRef, useState, useCallback, useLayoutEffect } from "react";
+import type { UseWebSocketOptions, WSMessage, WSOutgoing, MessageType, Message, MembershipEvent } from "@/types";
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws";
 
@@ -15,6 +15,7 @@ export function useWebSocket({
     onRead,
     onUserJoined,
     onUserLeft,
+    onMembership,
     onPong,
     onError
 }: UseWebSocketOptions) {
@@ -23,23 +24,25 @@ export function useWebSocket({
     const retryCount = useRef(0);
     const isMounted = useRef(true);
     const [connected, setConnected] = useState(false);
-
+    const connectRef = useRef<() => void>(() => {});
     const onMessageRef = useRef(onMessage);
     const onTypingRef = useRef(onTyping);
     const onPresenceRef = useRef(onPresence);
     const onReadRef = useRef(onRead);
     const onUserJoinedRef = useRef(onUserJoined);
     const onUserLeftRef = useRef(onUserLeft);
+    const onMembershipRef = useRef(onMembership);
     const onPongRef = useRef(onPong);
     const onErrorRef = useRef(onError);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         onMessageRef.current = onMessage;
         onTypingRef.current = onTyping;
         onPresenceRef.current = onPresence;
         onReadRef.current = onRead;
         onUserJoinedRef.current = onUserJoined;
         onUserLeftRef.current = onUserLeft;
+        onMembershipRef.current = onMembership;
         onPongRef.current = onPong;
         onErrorRef.current = onError;
     });
@@ -60,6 +63,12 @@ export function useWebSocket({
             if (!isMounted.current) return;
             try {
                const event: WSMessage = JSON.parse(e.data);
+               if (event.type === "welcome") {
+                    if (wsRef.current?.readyState === WebSocket.OPEN) {
+                        wsRef.current.send(JSON.stringify({ type: "read" }));
+                    }
+                    return;
+               }
                switch (event.type){
                 case "message":
                     if (event.id && event.sender){
@@ -71,7 +80,8 @@ export function useWebSocket({
                         onTypingRef.current(
                             Number(event.user_id), 
                             event.full_name, 
-                            event.is_typing ?? false);
+                            event.is_typing ?? false
+                        );
                     }
                     break;
                 case "presence":
@@ -91,26 +101,25 @@ export function useWebSocket({
                     break;
                 case "user_joined":
                     if(event.user_id !== undefined && event.full_name !== undefined){
-                        onUserJoinedRef.current(Number(event.user_id), event.full_name)
+                        onUserJoinedRef.current(Number(event.user_id), event.full_name);
                     }
                     break;
                 case  "user_left":
                     if(event.user_id !== undefined && event.full_name !== undefined){
-                        onUserLeftRef.current(Number(event.user_id), event.full_name)
+                        onUserLeftRef.current(Number(event.user_id), event.full_name);
+                    }
+                    break;
+                case "membership":
+                    if (event.action && event.conversation_id !== undefined) {
+                        onMembershipRef.current?.(event as MembershipEvent);
                     }
                     break;
                 case "pong":
                     onPongRef.current();
                     break;
-                case "welcome":
-                    if (wsRef.current?.readyState === WebSocket.OPEN) {
-                            wsRef.current.send(JSON.stringify({ type: "read" }));
-                        }
-                        break;
                 case "error":
                     onErrorRef.current(event.content ?? "Unknown error");
                     break;
-
                }
             } catch (err){
                 console.error("Failed to parse message:", err);
@@ -127,7 +136,7 @@ export function useWebSocket({
                     retryCount.current++;
                     const delay = Math.min(1000 * Math.pow(2, retryCount.current - 1), 30000);
                     retryTimeout.current = setTimeout(() => {
-                        connect();
+                        connectRef.current();
                     }, delay);
                 }
             }
@@ -136,6 +145,10 @@ export function useWebSocket({
         ws.onerror = () => ws.close();
 
     }, [conversation_id, token]);
+
+    useEffect(() => {
+        connectRef.current = connect;
+    }, [connect]);
 
 
     // Connect / reconnect whenever conversation_id or token changes
@@ -171,7 +184,7 @@ export function useWebSocket({
         content: string,
         message_type: MessageType = "text",
         extras: {file_url?: string; 
-            language?: string; expires_at?: string; temp_id?: string} = {}
+            language?: string; temp_id?: string} = {}
     ):boolean =>{
         if(wsRef.current?.readyState !== WebSocket.OPEN) return false;
 
@@ -179,8 +192,9 @@ export function useWebSocket({
             type: "message",
             content,
             message_type,
+            file_url: extras.file_url,
+            language: extras.language,
             temp_id: extras.temp_id ?? crypto.randomUUID(),
-            ...extras,
         };
         wsRef.current.send(JSON.stringify(frame));
         return true;
@@ -204,5 +218,3 @@ export function useWebSocket({
         
 
 }
-
-

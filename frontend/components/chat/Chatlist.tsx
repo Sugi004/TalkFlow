@@ -1,4 +1,5 @@
-" use client"
+"use client"
+/* eslint-disable @next/next/no-img-element */
 
 import { useState, useRef } from "react"
 import { Conversation, User } from "@/types"
@@ -25,7 +26,7 @@ function lastMsgPreview(conv: Conversation): string {
     return msg.content || ""
 }
 
-function ConvAvatar({ conv }: { conv: Conversation }) {
+export function ConvAvatar({ conv }: { conv: Conversation }) {
     const name = conv.is_group
         ? (conv.group_name ?? "Group")
         : (conv.other_user?.full_name ?? conv.other_user?.email ?? "?");
@@ -48,7 +49,7 @@ function ConvAvatar({ conv }: { conv: Conversation }) {
             <div className={`w-9 h-9 rounded flex items-center justify-center text-[11px] font-bold font-mono ${getAvatarColor(name)}`}>
                 {conv.is_group ? "G" : getInitials(name)}
             </div>
-            {!conv.is_group && conv.participants[1]?.is_online && (
+            {!conv.is_group && conv.other_user?.is_online && (
                 <span className="absolute -bottom-px -right-px w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-[#0a0e14]" />
             )}
         </div>

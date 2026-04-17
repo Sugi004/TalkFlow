@@ -11,8 +11,12 @@ export const updateMe = async (payload: {full_name?: string, avatar_url?: string
     return data;
 }
 
+export const deleteMyAvatar = async (): Promise<User> => {
+    const {data} = await api.delete("/users/me/avatar");
+    return data;
+}
+
 export const searchUsers = async (q: string): Promise<User[]> => {
     const {data} = await api.get("/users/search", {params: {q}});
     return data;
 }
-

@@ -1,14 +1,18 @@
 "use client"
+/* eslint-disable @next/next/no-img-element */
 
 import { useState, useEffect, useRef, ChangeEvent } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useAuth } from "@/context/AuthContext"
-import { getMe, updateMe } from "@/lib/users"
+import { deleteMyAvatar, getMe, updateMe } from "@/lib/users"
 import { User } from "@/types/index"
 import toast from "react-hot-toast"
-import { AVATAR_PALETTES, getAvatarColor, getInitials } from "@/lib/utils"
+import { getAvatarColor, getInitials } from "@/lib/utils"
 import { uploadFile } from "@/lib/uploads"
+import { getErrorMessage } from "@/lib/auth"
+
+const AVATAR_EDITOR_SIZE = 288
 
 function formatDate(iso?: string) {
     if (!iso) return "-";
@@ -30,8 +34,16 @@ export default function ProfilePage() {
     const [saving, setSaving] = useState(false)
     const [uploadPct, setUploadPct] = useState(0)
     const [mounted, setMounted] = useState(false)
+    const [showAvatarViewer, setShowAvatarViewer] = useState(false)
+    const [showAvatarEditor, setShowAvatarEditor] = useState(false)
+    const [pendingAvatar, setPendingAvatar] = useState<{ src: string; name: string; type: string } | null>(null)
+    const [editorZoom, setEditorZoom] = useState(1)
+    const [editorOffsetX, setEditorOffsetX] = useState(0)
+    const [editorOffsetY, setEditorOffsetY] = useState(0)
+    const [editorImageSize, setEditorImageSize] = useState<{ width: number; height: number } | null>(null)
 
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const editorImageRef = useRef<HTMLImageElement>(null)
 
     useEffect(() => {
         setMounted(true)
@@ -49,7 +61,7 @@ export default function ProfilePage() {
             .finally(() => {
                 setLoading(false)
             })
-    }, [isAuthenticated])
+    }, [isAuthenticated, logout, router])
 
     async function handleSave() {
         if (!user) return;
@@ -58,37 +70,166 @@ export default function ProfilePage() {
             const updated = await updateMe({ full_name: fullName.trim() || undefined })
             setUser(updated)
             toast.success("Profile updated")
-        } catch (e: any) {
-            console.log(e.response)
-
-            toast.error("Failed to save");
+        } catch (error: unknown) {
+            toast.error(getErrorMessage(error, "Failed to save"));
         } finally {
             setSaving(false)
         }
     }
 
-    async function handleAvatarUpload(e: ChangeEvent<HTMLInputElement>) {
+    useEffect(() => {
+        return () => {
+            if (pendingAvatar?.src) {
+                URL.revokeObjectURL(pendingAvatar.src)
+            }
+        }
+    }, [pendingAvatar])
+
+    function closeAvatarEditor() {
+        setShowAvatarEditor(false)
+        setEditorZoom(1)
+        setEditorOffsetX(0)
+        setEditorOffsetY(0)
+        setEditorImageSize(null)
+        setPendingAvatar((current) => {
+            if (current?.src) {
+                URL.revokeObjectURL(current.src)
+            }
+            return null
+        })
+    }
+
+    function openAvatarEditor(file: File) {
+        setPendingAvatar((current) => {
+            if (current?.src) {
+                URL.revokeObjectURL(current.src)
+            }
+            return {
+                src: URL.createObjectURL(file),
+                name: file.name,
+                type: file.type || "image/jpeg",
+            }
+        })
+        setEditorZoom(1)
+        setEditorOffsetX(0)
+        setEditorOffsetY(0)
+        setEditorImageSize(null)
+        setShowAvatarEditor(true)
+    }
+
+    function getEditorLayout() {
+        const naturalWidth = editorImageSize?.width ?? editorImageRef.current?.naturalWidth ?? 0
+        const naturalHeight = editorImageSize?.height ?? editorImageRef.current?.naturalHeight ?? 0
+        if (!naturalWidth || !naturalHeight) {
+            return null
+        }
+
+        const coverScale = Math.max(AVATAR_EDITOR_SIZE / naturalWidth, AVATAR_EDITOR_SIZE / naturalHeight) * editorZoom
+        const width = naturalWidth * coverScale
+        const height = naturalHeight * coverScale
+        const overflowX = Math.max(0, width - AVATAR_EDITOR_SIZE)
+        const overflowY = Math.max(0, height - AVATAR_EDITOR_SIZE)
+        const left = (AVATAR_EDITOR_SIZE - width) / 2 - overflowX * (editorOffsetX / 100)
+        const top = (AVATAR_EDITOR_SIZE - height) / 2 - overflowY * (editorOffsetY / 100)
+
+        return {
+            naturalWidth,
+            naturalHeight,
+            coverScale,
+            width,
+            height,
+            left,
+            top,
+        }
+    }
+
+    function buildAdjustedAvatarFile() {
+        const image = editorImageRef.current
+        if (!image) {
+            throw new Error("Image is not ready yet")
+        }
+
+        const layout = getEditorLayout()
+        if (!layout) {
+            throw new Error("Image dimensions are unavailable")
+        }
+        const sourceSize = AVATAR_EDITOR_SIZE / layout.coverScale
+        const sourceX = Math.min(
+            Math.max(0, -layout.left / layout.coverScale),
+            Math.max(0, layout.naturalWidth - sourceSize)
+        )
+        const sourceY = Math.min(
+            Math.max(0, -layout.top / layout.coverScale),
+            Math.max(0, layout.naturalHeight - sourceSize)
+        )
+
+        const canvas = document.createElement("canvas")
+        canvas.width = 512
+        canvas.height = 512
+
+        const ctx = canvas.getContext("2d")
+        if (!ctx) {
+            throw new Error("Canvas is unavailable")
+        }
+
+        ctx.imageSmoothingQuality = "high"
+        ctx.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, canvas.width, canvas.height)
+
+        return new Promise<File>((resolve, reject) => {
+            canvas.toBlob((blob) => {
+                if (!blob) {
+                    reject(new Error("Failed to prepare image"))
+                    return
+                }
+                resolve(new File([blob], pendingAvatar?.name || "avatar.jpg", { type: pendingAvatar?.type || "image/jpeg" }))
+            }, pendingAvatar?.type || "image/jpeg", 0.92)
+        })
+    }
+
+    function handleAvatarUpload(e: ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0]
         if (!file) return;
         if (!file.type.startsWith("image/")) { toast.error("Please upload an image"); return; }
         if (file.size > 1024 * 1024 * 5) { toast.error("Image size must be less than 5MB"); return; }
+        openAvatarEditor(file)
+        e.target.value = ""
+    }
+
+    async function handleSaveAdjustedAvatar() {
+        if (!pendingAvatar) return
         setUploading(true)
         setUploadPct(0)
         try {
-
-            const url = await uploadFile(file, setUploadPct)
+            const adjustedFile = await buildAdjustedAvatarFile()
+            const url = await uploadFile(adjustedFile, setUploadPct)
             const updated = await updateMe({ avatar_url: url })
             refreshUser()
             setUser(updated)
+            setShowAvatarViewer(false)
+            closeAvatarEditor()
             toast.success("Profile picture updated")
-            console.log(url)
-        } catch (e: any) {
-            console.log(e.response)
-            toast.error("Failed to upload avatar");
+        } catch (error: unknown) {
+            toast.error(getErrorMessage(error, "Failed to upload avatar"));
         } finally {
             setUploading(false)
             setUploadPct(0)
-            e.target.value = ""
+        }
+    }
+
+    async function handleDeleteAvatar() {
+        if (!user?.avatar_url) return;
+        setUploading(true)
+        try {
+            const updated = await deleteMyAvatar()
+            refreshUser()
+            setUser(updated)
+            setShowAvatarViewer(false)
+            toast.success("Profile picture removed")
+        } catch (error: unknown) {
+            toast.error(getErrorMessage(error, "Failed to remove avatar"));
+        } finally {
+            setUploading(false)
+            setUploadPct(0)
         }
     }
 
@@ -98,6 +239,7 @@ export default function ProfilePage() {
     }
 
     const name = user?.full_name ?? user?.email ?? ""
+    const editorLayout = getEditorLayout()
 
     return (
         <>
@@ -171,7 +313,7 @@ export default function ProfilePage() {
 
                                         {/* Upload overlay */}
                                         <button
-                                            onClick={() => fileInputRef.current?.click()}
+                                            onClick={() => setShowAvatarViewer(true)}
                                             disabled={uploading}
                                             className="absolute inset-0 flex items-center justify-center bg-[#080c10]/70 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-cyan-400 text-xs font-mono disabled:cursor-not-allowed"
                                         >
@@ -181,7 +323,7 @@ export default function ProfilePage() {
                                                     <span>{uploadPct}%</span>
                                                 </div>
                                             ) : (
-                                                <span>edit</span>
+                                                <span>view</span>
                                             )}
                                         </button>
                                     </div>
@@ -194,7 +336,32 @@ export default function ProfilePage() {
                                         </div>
                                     )}
 
-                                    <p className="text-[11px] text-[#3a4a55] font-mono">Click avatar to change photo</p>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowAvatarViewer(true)}
+                                            className="text-[11px] text-cyan-400 font-mono hover:underline"
+                                        >
+                                            View
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="text-[11px] text-[#4a6070] font-mono hover:text-cyan-400 transition-colors"
+                                        >
+                                            Change
+                                        </button>
+                                        {user.avatar_url && (
+                                            <button
+                                                type="button"
+                                                onClick={handleDeleteAvatar}
+                                                disabled={uploading}
+                                                className="text-[11px] text-[#ff4d6d] font-mono hover:underline disabled:opacity-50"
+                                            >
+                                                Remove
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {/* Form */}
@@ -231,7 +398,7 @@ export default function ProfilePage() {
                                             <span className="text-cyan-400 mr-1">03</span>Member Since
                                         </label>
                                         <div className="bg-[#060a0e] border border-[#1e2a35] rounded px-3.5 py-3 text-[13px] text-[#5a7080] font-mono">
-                                            {formatDate((user as any).created_at)}
+                                            {formatDate(user.created_at)}
                                         </div>
                                     </div>
 
@@ -257,6 +424,192 @@ export default function ProfilePage() {
                     </div>
                 </div>
             </div>
+            {showAvatarViewer && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 px-4">
+                    <div className="w-full max-w-xl">
+                        <div className="mb-4 flex items-center justify-between">
+                            <button
+                                type="button"
+                                onClick={() => setShowAvatarViewer(false)}
+                                className="text-[12px] text-[#c9d8e8] font-mono hover:text-cyan-400 transition-colors"
+                            >
+                                Close
+                            </button>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="text-[12px] text-cyan-400 font-mono hover:underline"
+                                >
+                                    Change photo
+                                </button>
+                                {user?.avatar_url && (
+                                    <button
+                                        type="button"
+                                        onClick={handleDeleteAvatar}
+                                        disabled={uploading}
+                                        className="text-[12px] text-[#ff4d6d] font-mono hover:underline disabled:opacity-50"
+                                    >
+                                        Remove photo
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        <div className="rounded-3xl border border-[#1e2a35] bg-[#0d1117] p-6 shadow-2xl">
+                            <div className="flex items-center justify-center">
+                                {user?.avatar_url ? (
+                                    <img
+                                        src={user.avatar_url}
+                                        alt={name}
+                                        className="max-h-[70vh] w-full rounded-3xl object-contain"
+                                    />
+                                ) : (
+                                    <div className={`flex h-72 w-72 items-center justify-center rounded-full text-7xl font-bold ${getAvatarColor(name)}`}>
+                                        {getInitials(name)}
+                                    </div>
+                                )}
+                            </div>
+                            <div className="mt-5 text-center">
+                                <p className="text-[16px] font-semibold text-[#c9d8e8]">{name}</p>
+                                <p className="text-[11px] text-[#4a6070] font-mono">Profile photo</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {showAvatarEditor && pendingAvatar && (
+                <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/90 px-4">
+                    <div className="w-full max-w-2xl rounded-3xl border border-[#1e2a35] bg-[#0d1117] p-6 shadow-2xl">
+                        <div className="mb-5 flex items-center justify-between">
+                            <div>
+                                <p className="text-[16px] font-semibold text-[#c9d8e8]">Adjust Profile Photo</p>
+                                <p className="text-[11px] text-[#4a6070] font-mono">Crop and position your photo before saving.</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={closeAvatarEditor}
+                                disabled={uploading}
+                                className="text-[12px] text-[#c9d8e8] font-mono hover:text-cyan-400 transition-colors disabled:opacity-50"
+                            >
+                                Close
+                            </button>
+                        </div>
+
+                        <div className="grid gap-6 md:grid-cols-[320px_minmax(0,1fr)]">
+                            <div className="flex flex-col items-center gap-4">
+                                <div className="relative h-72 w-72 overflow-hidden rounded-[28px] border border-[#1e2a35] bg-[#060a0e]">
+                                    <img
+                                        ref={editorImageRef}
+                                        src={pendingAvatar.src}
+                                        alt="Adjust avatar"
+                                        onLoad={(e) => {
+                                            setEditorImageSize({
+                                                width: e.currentTarget.naturalWidth,
+                                                height: e.currentTarget.naturalHeight,
+                                            })
+                                        }}
+                                        className="absolute max-w-none transition-all duration-150"
+                                        style={editorLayout ? {
+                                            width: `${editorLayout.width}px`,
+                                            height: `${editorLayout.height}px`,
+                                            left: `${editorLayout.left}px`,
+                                            top: `${editorLayout.top}px`,
+                                        } : {
+                                            width: `${AVATAR_EDITOR_SIZE}px`,
+                                            height: `${AVATAR_EDITOR_SIZE}px`,
+                                            left: 0,
+                                            top: 0,
+                                            objectFit: "cover",
+                                        }}
+                                    />
+                                    <div className="pointer-events-none absolute inset-0 border border-white/10" />
+                                </div>
+
+                                {uploading && (
+                                    <div className="w-72">
+                                        <div className="h-1 overflow-hidden rounded-full bg-[#1e2a35]">
+                                            <div className="h-full bg-cyan-400 transition-all" style={{ width: `${uploadPct}%` }} />
+                                        </div>
+                                        <p className="mt-1 text-center text-[10px] text-cyan-400 font-mono">{uploadPct}%</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-5">
+                                <div>
+                                    <label className="mb-2 block text-[10px] uppercase tracking-[.14em] text-[#4a6070] font-mono">
+                                        Zoom
+                                    </label>
+                                    <input
+                                        type="range"
+                                        min="1"
+                                        max="3"
+                                        step="0.01"
+                                        value={editorZoom}
+                                        onChange={(e) => setEditorZoom(Number(e.target.value))}
+                                        className="w-full accent-cyan-400"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="mb-2 block text-[10px] uppercase tracking-[.14em] text-[#4a6070] font-mono">
+                                        Horizontal Position
+                                    </label>
+                                    <input
+                                        type="range"
+                                        min="-100"
+                                        max="100"
+                                        step="1"
+                                        value={editorOffsetX}
+                                        onChange={(e) => setEditorOffsetX(Number(e.target.value))}
+                                        className="w-full accent-cyan-400"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="mb-2 block text-[10px] uppercase tracking-[.14em] text-[#4a6070] font-mono">
+                                        Vertical Position
+                                    </label>
+                                    <input
+                                        type="range"
+                                        min="-100"
+                                        max="100"
+                                        step="1"
+                                        value={editorOffsetY}
+                                        onChange={(e) => setEditorOffsetY(Number(e.target.value))}
+                                        className="w-full accent-cyan-400"
+                                    />
+                                </div>
+
+                                <div className="rounded-2xl border border-[#1e2a35] bg-[#0a0e14] p-4">
+                                    <p className="text-[11px] text-[#4a6070] font-mono">
+                                        The photo is saved as a square avatar, similar to chat apps like WhatsApp.
+                                    </p>
+                                </div>
+
+                                <div className="flex flex-wrap gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={closeAvatarEditor}
+                                        disabled={uploading}
+                                        className="rounded-full border border-[#1e2a35] px-4 py-2 text-[12px] text-[#c9d8e8] font-mono transition-colors hover:bg-[#1a2530] disabled:opacity-50"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveAdjustedAvatar}
+                                        disabled={uploading}
+                                        className="rounded-full bg-cyan-400 px-4 py-2 text-[12px] font-bold uppercase tracking-[.12em] text-[#080c10] disabled:opacity-50"
+                                    >
+                                        {uploading ? "Saving…" : "Save Photo"}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
         </>
     )

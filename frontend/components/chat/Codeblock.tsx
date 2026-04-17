@@ -42,14 +42,13 @@ function normalizeLang(lang: string): string {
 export default function CodeBlock({ code, language = "" }: CodeBlockProps) {
     const [highlighted, setHighlighted] = useState<string>("");
     const [copied, setCopied] = useState(false)
-    const [loading, setLoading] = useState(true)
     const lang = language.toLocaleLowerCase().trim();
     const label = LANG_LABELS[lang] ?? lang.charAt(0).toUpperCase() + lang.slice(1);
     const shikiLang = normalizeLang(lang);
+    const loading = !highlighted;
 
     useEffect(() => {
         let cancelled = false;
-        setLoading(true);
 
         codeToHtml(code, {
             lang: shikiLang,
@@ -57,7 +56,6 @@ export default function CodeBlock({ code, language = "" }: CodeBlockProps) {
         }).then((html) => {
             if (!cancelled) {
                 setHighlighted(html);
-                setLoading(false);
             }
         })
 

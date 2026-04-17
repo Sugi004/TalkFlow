@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useRef, useCallback } from "react"
-import { Message } from "@/types"
+import { useEffect, useRef, useCallback, useLayoutEffect } from "react"
+import { MembershipEvent, Message } from "@/types"
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws";
 
@@ -10,27 +10,31 @@ export function useGlobalSocket({
     token,
     onMessage,
     onPresence,
-    onRead
+    onRead,
+    onMembership
 }: {
     user_id: number | null;
     token: string | null;
     onMessage: (msg: Message) => void;
     onPresence?: (user_id: number, full_name: string, is_online: boolean, last_seen: string) => void;
     onRead?: (conversation_id: number, read_by: number) => void;
+    onMembership?: (event: MembershipEvent) => void;
 }) {
     const wsRef = useRef<WebSocket | null>(null);
     const retryTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
     const retryCount = useRef(0);
     const isMounted = useRef(true);
-
-    // Always-fresh refs — updated every render so closures never go stale
+    const connectRef = useRef<() => void>(() => {});
     const onMessageRef = useRef(onMessage);
     const onPresenceRef = useRef(onPresence);
     const onReadRef = useRef(onRead);
-    useEffect(() => {
+    const onMembershipRef = useRef(onMembership);
+
+    useLayoutEffect(() => {
         onMessageRef.current = onMessage;
         onPresenceRef.current = onPresence;
         onReadRef.current = onRead;
+        onMembershipRef.current = onMembership;
     });
 
     const connect = useCallback(() => {
@@ -54,6 +58,8 @@ export function useGlobalSocket({
                     );
                 } else if (event.type === "read") {
                     onReadRef.current?.(Number(event.conversation_id), Number(event.read_by));
+                } else if (event.type === "membership" && event.action && event.conversation_id !== undefined) {
+                    onMembershipRef.current?.(event as MembershipEvent);
                 }
             } catch {}
         };
@@ -65,13 +71,17 @@ export function useGlobalSocket({
                 retryCount.current++;
                 const delay = Math.min(1000 * Math.pow(2, retryCount.current - 1), 30000);
                 retryTimeout.current = setTimeout(() => {
-                    connect();
+                    connectRef.current();
                 }, delay);
             }
         };
 
         ws.onerror = () => ws.close();
     }, [user_id, token]);
+
+    useEffect(() => {
+        connectRef.current = connect;
+    }, [connect]);
 
     useEffect(() => {
         isMounted.current = true;

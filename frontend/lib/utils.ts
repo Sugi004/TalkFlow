@@ -11,7 +11,7 @@ export const AVATAR_PALETTES = [
 
 export const getAvatarColor = (name: string): string => {
     let h = 0;
-    for (let c of name) h = (h * 31 + c.charCodeAt(0)) & 0xFFFFFF;
+    for (const c of name) h = (h * 31 + c.charCodeAt(0)) & 0xFFFFFF;
     return AVATAR_PALETTES[h % AVATAR_PALETTES.length];
 }
 
@@ -28,4 +28,3 @@ export const getInitials = (name: string): string => {
 export function convDisplayName(conv: Conversation) {
     return conv.is_group ? (conv.group_name ?? "Group") : (conv.other_user?.full_name ?? conv.other_user?.email ?? "Unknown");
 }
-

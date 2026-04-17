@@ -1,13 +1,16 @@
 "use client"
 
-import { useState, useEffect, useLayoutEffect, useRef, useCallback, KeyboardEvent, ChangeEvent } from "react"
-import { Conversation, Message, User, ChatWindowProps } from "@/types"
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, KeyboardEvent, ChangeEvent } from "react"
+import toast from "react-hot-toast"
+import { Message, ChatWindowProps } from "@/types"
 import { getMessages, deleteMessage, markAsRead } from "@/lib/messages"
 import { uploadFile, messageTypeFromMime } from "@/lib/uploads"
 import { getSmartReply, summarizeConversation, translateMessage } from "@/lib/ai"
 import { useWebSocket } from "@/hooks/useWebSocket"
 import MessageBubble from "./Messagebubble"
 import { convDisplayName } from "@/lib/utils"
+import { ConvAvatar } from "./Chatlist"
+import GroupInfoModal from "./GroupInfoModal"
 
 // Helpers
 
@@ -21,11 +24,11 @@ function formatDate(iso: string) {
     return d.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
 }
 
-function convDisplayAvatar(conv: Conversation) {
-    if (conv.is_group && conv.group_avatar_url) return conv.group_avatar_url;
-    if (!conv.is_group && conv.other_user?.avatar_url) return conv.other_user.avatar_url;
-    return null;
-}
+// function convDisplayAvatar(conv: Conversation) {
+//     if (conv.is_group && conv.group_avatar_url) return conv.group_avatar_url;
+//     if (!conv.is_group && conv.other_user?.avatar_url) return conv.other_user.avatar_url;
+//     return null;
+// }
 
 
 // Group: same sender + same type + within 3 min
@@ -50,7 +53,7 @@ type ListItem = | (Message & { grouped: boolean }) | { _divider: string; _key: s
 function injectDividers(msgs: ReturnType<typeof buildGroups>): ListItem[] {
     const result: ListItem[] = [];
     let lastDate = "";
-    for (let m of msgs) {
+    for (const m of msgs) {
         const d = formatDate(m.created_at);
         if (d !== lastDate) {
             result.push({ _divider: d, _key: `div-${d}` })
@@ -109,7 +112,7 @@ function AiPanel({
     const [translated, setTranslated] = useState("")
 
 
-    async function loadReplies() {
+    const loadReplies = useCallback(async () => {
         setLoading(true)
         try {
             setReplies(await getSmartReply(conversationId));
@@ -117,9 +120,9 @@ function AiPanel({
         finally {
             setLoading(false)
         }
-    }
+    }, [conversationId])
 
-    async function loadSummary() {
+    const loadSummary = useCallback(async () => {
         setLoading(true)
         try {
             setSummary(await summarizeConversation(conversationId))
@@ -127,7 +130,7 @@ function AiPanel({
         finally {
             setLoading(false)
         }
-    }
+    }, [conversationId])
 
     async function handleTranslate() {
         if (!inputText.trim()) return;
@@ -143,7 +146,7 @@ function AiPanel({
     useEffect(() => {
         if (tab === "replies" && !replies.length) loadReplies();
         if (tab === "summary" && !summary) loadSummary();
-    }, [tab])
+    }, [loadReplies, loadSummary, replies.length, summary, tab])
 
 
     return (
@@ -243,7 +246,17 @@ function AiPanel({
 
 // Main component
 
-export default function ChatWindow({ conversation, currentUser, token, onIncomingMessage, onPresence, onDelete, onExternalRead }: ChatWindowProps) {
+export default function ChatWindow({
+    conversation,
+    currentUser,
+    token,
+    onIncomingMessage,
+    onPresence,
+    onLeaveConversation,
+    onRefreshConversations,
+    onExternalRead,
+    externalMessage,
+}: ChatWindowProps) {
     const PAGE_SIZE = 50
     const [messagesMap, setMessagesMap] = useState<Record<number, Message[]>>({})
     const [loadingMsgs, setLoadingMsgs] = useState(false)
@@ -252,6 +265,7 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
     const [uploading, setUploading] = useState(false)
     const [uploadProgress, setUploadProgress] = useState(0)
     const [showAiPanel, setShowAiPanel] = useState(false)
+    const [showGroupInfo, setShowGroupInfo] = useState(false)
     const [typingUsers, setTypingUsers] = useState<{ id: number; name: string }[]>([])
     const [translatedMap, setTranslatedMap] = useState<Record<number, string>>({})
     const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -270,8 +284,8 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
 
     const convId = conversation?.id ?? null
 
-    const messages = convId ? (messagesMap[convId] ?? []) : []
-    const hasMore = convId ? (hasMoreMap[convId] ?? true) : false
+    const messages = useMemo(() => (convId ? (messagesMap[convId] ?? []) : []), [convId, messagesMap])
+    const hasMore = useMemo(() => (convId ? (hasMoreMap[convId] ?? true) : false), [convId, hasMoreMap])
 
     const setMessages = useCallback((updater: Message[] | ((prev: Message[]) => Message[])) => {
         if (!convId) return;
@@ -282,25 +296,21 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
         });
     }, [convId]);
 
-    const offsetRef = {
-        get current() { return convId ? (offsetsCacheRef.current[convId] ?? 0) : 0 },
-        set current(val) { if (convId) offsetsCacheRef.current[convId] = val }
-    }
-
     // load messages
-    async function loadMessages(convId: number, reset = false, skipOverride?: number, dontUpdateOffset = false) {
+    const loadMessages = useCallback(async (convId: number, reset = false, skipOverride?: number, dontUpdateOffset = false) => {
         if (loadingMoreRef.current) return;
         loadingMoreRef.current = true
         setLoadingMsgs(true)
         try {
-            const skip = reset ? 0 : (skipOverride ?? offsetRef.current)
+            const currentOffset = offsetsCacheRef.current[convId] ?? 0
+            const skip = reset ? 0 : (skipOverride ?? currentOffset)
             const msgs = await getMessages(convId, skip, PAGE_SIZE)
             if (reset) {
                 setMessages(msgs)
-                if (!dontUpdateOffset) offsetRef.current = msgs.length
+                if (!dontUpdateOffset) offsetsCacheRef.current[convId] = msgs.length
             } else {
                 preserveScrollRef.current = true
-                if (!dontUpdateOffset) offsetRef.current = skip + msgs.length
+                if (!dontUpdateOffset) offsetsCacheRef.current[convId] = skip + msgs.length
                 setMessages((prev) => mergeUniqueMessages(prev, msgs))
             }
             setHasMoreMap(prev => ({ ...prev, [convId]: msgs.length === PAGE_SIZE }))
@@ -311,32 +321,66 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
             loadingMoreRef.current = false
             setLoadingMsgs(false)
         }
-    }
+    }, [PAGE_SIZE, setMessages])
 
     useEffect(() => {
         if (!convId) return;
         setTypingUsers([])
         setShowAiPanel(false)
+        setShowGroupInfo(false)
         setTranslatedMap({})
         loadingMoreRef.current = false
         initialScrollDoneRef.current = false
     }, [convId, token])
 
+    const handleRead = useCallback(() => {
+        setMessages((prev) =>
+            prev.map((m) =>
+            ((m.status === "sent" || m.status === "delivered")
+                ? { ...m, status: "read" as const }
+                : m))
+        )
+    }, [setMessages])
+
     useEffect(() => {
         // If the signaled conversation ID matches our current view
         if (onExternalRead && onExternalRead === convId) {
-            handleRead(convId, 0);
+            handleRead();
         }
-    }, [onExternalRead, convId]);
+    }, [convId, handleRead, onExternalRead]);
 
     useEffect(() => {
         if (!convId || !token) return;
-        if (messagesMap[convId] && messagesMap[convId].length > 0) {
-            loadMessages(convId, false, 0, true);
+        if (messagesMap[convId] !== undefined) {
             return;
         }
         loadMessages(convId, true)
-    }, [convId, token])
+    }, [convId, loadMessages, messagesMap, token])
+
+    useEffect(() => {
+        if (!externalMessage || externalMessage.conversation_id !== convId) return
+        setMessages((prev) => {
+            if (prev.some((message) => message.id === externalMessage.id)) {
+                return prev
+            }
+            return [...prev, externalMessage].sort(
+                (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+            )
+        })
+    }, [convId, externalMessage, setMessages])
+
+    useEffect(() => {
+        const fallbackMessage = conversation?.last_message
+        if (!convId || !fallbackMessage || fallbackMessage.conversation_id !== convId) return
+        setMessages((prev) => {
+            if (prev.some((message) => message.id === fallbackMessage.id)) {
+                return prev
+            }
+            return [...prev, fallbackMessage].sort(
+                (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+            )
+        })
+    }, [convId, conversation?.last_message, setMessages])
 
     useLayoutEffect(() => {
         const container = messagesContainerRef.current
@@ -366,11 +410,15 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
                 if (idx !== -1) {
                     const updated = [...prev]
                     updated[idx] = msg
-                    return updated
+                    return updated.sort(
+                        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                    )
                 }
             }
             if (prev.some((m) => m.id === msg.id)) return prev;
-            return [...prev, msg]
+            return [...prev, msg].sort(
+                (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+            )
         })
         onIncomingMessage(msg)
         if (msg.conversation_id === convId && msg.sender?.id !== currentUser?.id) {
@@ -386,44 +434,22 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
         )
     }, [])
 
-    const handleRead = useCallback((_convId: number, _readBy: number) => {
-        setMessages((prev) =>
-            prev.map((m) =>
-            ((m.status === "sent" || m.status === "delivered")
-                ? { ...m, status: "read" as const }
-                : m))
-        )
-    }, [setMessages])
 
-    const handleUserJoined = useCallback((_uid: number, fullName: string) => {
-        const sys: Message = {
-            id: Date.now(),
-            conversation_id: convId!,
-            content: `${fullName} joined the chat`,
-            message_type: "text",
-            is_deleted: false,
-            status: "sent",
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            sender: { id: 0, email: "system" }
-        } as unknown as Message
-        setMessages((prev) => [...prev, sys])
-    }, [convId, setMessages])
 
-    const handleUserLeft = useCallback((_uid: number, fullName: string) => {
-        const sys: Message = {
-            id: Date.now() + 1,
-            conversation_id: convId!,
-            content: `${fullName} left the chat`,
-            message_type: "text",
-            is_deleted: false,
-            status: "sent",
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            sender: { id: 0, email: "system" }
-        } as unknown as Message
-        setMessages((prev) => [...prev, sys])
-    }, [convId, setMessages])
+    const handleUserJoined = useCallback((userId: number, fullName: string) => {
+        if (userId === currentUser?.id) return
+        toast.success(`${fullName} joined the group`, { id: `group-join-${convId}-${userId}` })
+        onRefreshConversations?.().catch(() => {})
+    }, [convId, currentUser?.id, onRefreshConversations])
+
+    const handleUserLeft = useCallback((userId: number, fullName: string) => {
+        if (userId === currentUser?.id) return
+        toast(`${fullName} left the group`, {
+            id: `group-leave-${convId}-${userId}`,
+            icon: "👋",
+        })
+        onRefreshConversations?.().catch(() => {})
+    }, [convId, currentUser?.id, onRefreshConversations])
 
     const { connected, sendMessage, sendTyping, sendRead } = useWebSocket({
         conversation_id: convId,
@@ -435,7 +461,7 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
         onUserJoined: handleUserJoined,
         onUserLeft: handleUserLeft,
         onPong: () => { },
-        onError: (error: string) => { },
+        onError: () => { },
     });
 
     // Store sendRead in ref for use in callbacks
@@ -448,7 +474,7 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
             markAsRead(convId).catch(() => { })
         }
 
-    }, [convId, connected]);
+    }, [convId, connected, sendRead]);
 
     // Send text
 
@@ -560,7 +586,7 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
         const prevScrollHeight = container.scrollHeight;
         preserveScrollRef.current = true
         restoreScrollTopRef.current = 0
-        await loadMessages(convId, false, offsetRef.current)
+        await loadMessages(convId, false, offsetsCacheRef.current[convId] ?? 0)
 
         requestAnimationFrame(() => {
             if (!messagesContainerRef.current) return;
@@ -594,18 +620,11 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
                 {/* Header */}
                 <header className="flex items-center gap-3 px-5 py-3 border-b border-[#1e2a35] bg-[#0d1117] shrink-0">
                     {/* Avatar — ADD THIS BLOCK */}
-                    {(() => {
-                        const url = convDisplayAvatar(conversation);
-                        const name = convDisplayName(conversation);
-                        const initials = name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
-                        return url ? (
-                            <img src={url} alt={name} className="w-9 h-9 rounded-full object-cover shrink-0" />
-                        ) : (
-                            <div className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-bold font-mono shrink-0 bg-cyan-400/20 text-cyan-400">
-                                {initials}
-                            </div>
-                        );
-                    })()}
+
+
+                    <ConvAvatar conv={conversation} />
+
+
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                             <h1 className="text-[14px] font-bold text-[#c9d8e8] font-mono truncate">
@@ -615,9 +634,13 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
                             )}
                             {conversation.is_group && (
-                                <span className="text-[10px] text-[#4a6070] font-mono">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowGroupInfo(true)}
+                                    className="text-[10px] text-[#4a6070] font-mono transition-colors hover:text-cyan-400"
+                                >
                                     {conversation.participants?.length ?? 0} members
-                                </span>
+                                </button>
                             )}
                         </div>
                         {!conversation.is_group && conversation.other_user && (
@@ -640,6 +663,16 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
                     >
                         <span>✦</span> AI
                     </button>
+                    {conversation.is_group && (
+                        <button
+                            type="button"
+                            onClick={() => setShowGroupInfo(true)}
+                            className="flex items-center gap-1.5 rounded border border-transparent px-2.5 py-1 text-[11px] font-mono font-semibold text-[#4a6070] transition-all hover:border-cyan-400/20 hover:bg-cyan-400/10 hover:text-cyan-400"
+                            title="Open group info"
+                        >
+                            <span>☰</span> Group
+                        </button>
+                    )}
                 </header>
                 {/* Messages */}
                 <div
@@ -668,13 +701,13 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
                     )}
 
                     <div className="pb-2">
-                        {withDivs.map((item, idx) => {
+                        {withDivs.map((item) => {
                             if ("_divider" in item) {
                                 return (
-                                    <div key={(item as any)._key} className="flex items-center gap-3 my-5 px-5">
+                                    <div key={item._key} className="flex items-center gap-3 my-5 px-5">
                                         <div className="flex-1 h-px bg-[#1e2a35]" />
                                         <span className="text-[9.5px] text-[#3a4a55] font-mono tracking-widest uppercase">
-                                            {(item as any)._divider}
+                                            {item._divider}
                                         </span>
                                         <div className="flex-1 h-px bg-[#1e2a35]" />
                                     </div>
@@ -805,6 +838,15 @@ export default function ChatWindow({ conversation, currentUser, token, onIncomin
             }
         `}</style>
             </div>
+            {showGroupInfo && conversation.is_group && (
+                <GroupInfoModal
+                    conversation={conversation}
+                    currentUser={currentUser}
+                    onClose={() => setShowGroupInfo(false)}
+                    onConversationUpdated={onRefreshConversations}
+                    onLeaveConversation={onLeaveConversation}
+                />
+            )}
         </>
     )
 

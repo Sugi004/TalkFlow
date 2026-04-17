@@ -11,10 +11,17 @@ export enum MessageStatus {
 export interface User {
     id: number;
     email: string;
-    full_name: string;
-    avatar_url: string;
-    last_seen: string;
+    full_name?: string | null;
+    avatar_url?: string | null;
+    last_seen?: string | null;
     is_online: boolean;
+    created_at?: string;
+    updated_at?: string;
+}
+
+export interface ConversationParticipant extends User {
+    is_admin: boolean;
+    joined_at: string;
 }
 
 export interface AuthContextType {
@@ -29,15 +36,17 @@ export interface AuthContextType {
 export interface Conversation {
     id: number;
     is_group: boolean;
-    group_name: string;
-    group_avatar_url?: string;
-    other_user: User;
-    last_message: Message;
-    last_message_at: string;
-    participants: User[];
+    group_name?: string | null;
+    group_avatar_url?: string | null;
+    created_by: number;
+    current_user_is_admin?: boolean;
+    other_user: User | null;
+    last_message: Message | null;
+    last_message_at?: string | null;
+    participants: ConversationParticipant[];
     unread_count: number;
     created_at: string;
-    updated_at: string;
+    updated_at?: string;
 }
 
 export interface Message {
@@ -47,13 +56,28 @@ export interface Message {
     message_type: "text" | "file" | "image" | "video" | "code";
     file_url?: string;
     language?: string;
-    expires_at?: string;
     is_deleted: boolean;
     status: "sent" | "delivered" | "read" | "failed";
     created_at: string;
     updated_at: string;
     sender: User;
     temp_id?: string;
+}
+
+export type MembershipAction = "participant_added" | "participant_removed" | "participant_left";
+
+export interface MembershipEvent {
+    type: "membership";
+    action: MembershipAction;
+    conversation_id: number;
+    group_name?: string | null;
+    actor_user_id?: number;
+    actor_full_name?: string | null;
+    target_user_id?: number;
+    target_full_name?: string | null;
+    target_avatar_url?: string | null;
+    new_admin_user_id?: number | null;
+    new_admin_full_name?: string | null;
 }
 
 
@@ -63,7 +87,7 @@ export interface Token{
 }
 
 export interface WSMessage{
-    type: "message" | "typing" | "read" | "presence" | "pong" | "error" | "welcome" | "user_joined" | "user_left";
+    type: "message" | "typing" | "read" | "presence" | "pong" | "error" | "welcome" | "user_joined" | "user_left" | "membership";
     id?: number;
     temp_id?: string;
     conversation_id?: number;
@@ -72,18 +96,26 @@ export interface WSMessage{
     file_url?: string;
     read_by?: number;
     language?: string;
-    expires_at?: string;
     is_deleted?: boolean;
     status?: string;
     created_at?: string;
     updated_at?: string;
     sender?: User;
-    user_id?: string;
+    user_id?: number;
     full_name?: string;
     is_online?: boolean;
     is_typing?: boolean;
     last_seen?: string;
     message?: Message;
+    action?: MembershipAction;
+    actor_user_id?: number;
+    actor_full_name?: string | null;
+    target_user_id?: number;
+    target_full_name?: string | null;
+    target_avatar_url?: string | null;
+    group_name?: string | null;
+    new_admin_user_id?: number | null;
+    new_admin_full_name?: string | null;
     
 }
 
@@ -102,6 +134,7 @@ export interface UseWebSocketOptions {
     onRead: (message_id: number, read_by: number) => void;
     onUserJoined: (user_id: number, full_name: string) => void;
     onUserLeft: (user_id: number, full_name: string) => void;
+    onMembership?: (event: MembershipEvent) => void;
     onPong: () => void;
     onError: (error: string) => void;
 }
@@ -155,7 +188,10 @@ export interface ChatWindowProps{
     onPresence:(userId: number, fullName: string, isOnline: boolean, lastSeen: string) => void;
     onIncomingMessage:(message: Message) => void;
     onDelete: (conversationId: number) => void;
+    onLeaveConversation?: (conversationId: number) => Promise<void>;
+    onRefreshConversations?: () => Promise<void>;
     onExternalRead?: number | null;
+    externalMessage?: Message | null;
     
 }
 

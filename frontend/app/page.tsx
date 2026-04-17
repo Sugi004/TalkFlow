@@ -7,13 +7,15 @@ import { useAuth } from "@/context/AuthContext"
 export default function Home() {
   const { isAuthenticated } = useAuth();
   const router = useRouter();
+
   useEffect(() => {
     if (isAuthenticated) {
-      router.push("/conversations");
+      router.push("/chat");
     } else {
       router.push("/login");
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, router]);
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
       <div className="text-center">

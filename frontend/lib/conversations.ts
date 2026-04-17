@@ -21,8 +21,20 @@ export const createGroupConversation = async (name: string, participants: number
     return data;
 }
 
+export const updateGroupConversation = async (
+    conversation_id: number,
+    payload: { group_name?: string; group_avatar_url?: string | null }
+): Promise<Conversation> => {
+    const {data} = await api.patch(`/conversations/${conversation_id}`, payload);
+    return data;
+}
+
 export const addParticipant = async(conversation_id: number, user_id: number): Promise<void> => {
     await api.post(`/conversations/${conversation_id}/participants`, {user_id: user_id});
+}
+
+export const removeParticipant = async(conversation_id: number, user_id: number): Promise<void> => {
+    await api.delete(`/conversations/${conversation_id}/participants/${user_id}`);
 }
 
 export const leaveConversation = async(conversation_id: number): Promise<void> => {
@@ -33,4 +45,3 @@ export const deleteConversation = async(conversation_id: number): Promise<void> 
     await api.delete(`/conversations/${conversation_id}/leave`);
 }
     
-

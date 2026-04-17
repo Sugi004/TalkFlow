@@ -60,7 +60,7 @@ export default function Login() {
             authLogin(data.access_token);
             router.push("/chat");
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             toast.error(getErrorMessage(error, "Invalid email or password"));
         } finally {
             setLoading(false);

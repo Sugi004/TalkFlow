@@ -28,6 +28,7 @@ class UserCreate(BaseModel):
     @field_validator('password')
     @classmethod
     def validate_password(cls, v: str) -> str:
+        special_chars = set("!@#$%^&*()_+-=[]{};'")
         if len(v) < 8:
             raise ValueError("Password must be at least 8 characters long")
         if not any(c.isdigit() for c in v):
@@ -36,7 +37,7 @@ class UserCreate(BaseModel):
             raise ValueError("Password must contain at least one uppercase letter")
         if not any(c.islower() for c in v):
             raise ValueError("Password must contain at least one lowercase letter")
-        if not any(c in "!@#$%^&*()_+\-=\[\]{};'" for c in v):
+        if not any(c in special_chars for c in v):
             raise ValueError("Password must contain at least one special character")
         return v
 
@@ -94,7 +95,6 @@ class MessageResponse(BaseModel):
     message_type: MessageType
     file_url: Optional[str] = None
     language: Optional[str] = None
-    expires_at: Optional[datetime] = None
     is_deleted: bool
     status: MessageStatus 
     created_at: datetime
@@ -115,13 +115,26 @@ class GroupConversationCreate(BaseModel):
     group_avatar_url: Optional[str] = None
     participant_ids: List[int]
 
+class GroupConversationUpdate(BaseModel):
+    group_name: Optional[str] = None
+    group_avatar_url: Optional[str] = None
+
+class ConversationParticipantResponse(UserResponse):
+    is_admin: bool = False
+    joined_at: datetime
+
+    class Config:
+        from_attributes = True
+
 class ConversationResponse(BaseModel):
     id: int
     is_group: bool
     group_name: Optional[str] = None
     group_avatar_url: Optional[str] = None
     created_by: int
-    participants: List[UserSearch]
+    current_user_is_admin: bool = False
+    other_user: Optional[UserResponse] = None
+    participants: List[ConversationParticipantResponse]
     created_at: datetime
     updated_at: datetime
 
@@ -133,12 +146,15 @@ class ConversationListItem(BaseModel):
     is_group: bool
     group_name: Optional[str] = None
     group_avatar_url: Optional[str] = None
+    created_by: int
+    current_user_is_admin: bool = False
     other_user: Optional[UserResponse] = None
     last_message: Optional[MessageResponse] = None
     last_message_at: Optional[datetime] = None
     unread_count: int = 0
-    participants: List[UserResponse]
+    participants: List[ConversationParticipantResponse]
     created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True

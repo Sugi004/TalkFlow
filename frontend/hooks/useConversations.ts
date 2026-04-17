@@ -1,7 +1,7 @@
-" use client"
+"use client"
 
 import { useState, useEffect, useCallback } from "react";
-import { Conversation, Message } from "@/types";
+import { Conversation, ConversationParticipant, Message } from "@/types";
 import {useAuth} from "@/context/AuthContext";
 import {getConversations, 
     createDirectConversation, 
@@ -9,8 +9,11 @@ import {getConversations,
     leaveConversation as apiLeave, 
     addParticipant as apiAddParticipant, 
     deleteConversation as apiDelete} from "@/lib/conversations";
+import { getErrorMessage } from "@/lib/auth";
 
-
+type ConversationApiResponse = Conversation & {
+    participants?: ConversationParticipant[];
+};
 
 export const useConversations = () =>  {
     const {currentUser} = useAuth();
@@ -18,7 +21,9 @@ export const useConversations = () =>  {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     
-    function normalize(conv: any): Conversation {
+    const normalize = useCallback((conv: ConversationApiResponse): Conversation => {
+        const participants = conv.participants ?? [];
+
         return {
             ...conv,
             // The API already returns a correct other_user with is_online from Redis.
@@ -26,10 +31,10 @@ export const useConversations = () =>  {
             other_user: conv.is_group
                 ? null
                 : conv.other_user
-                    ?? conv.participants?.find((p: any) => p.id !== currentUser?.id)
+                    ?? participants.find((participant) => participant.id !== currentUser?.id)
                     ?? null,
         };
-    }
+    }, [currentUser?.id]);
 
 
     const refresh = useCallback(async () => {
@@ -39,12 +44,12 @@ export const useConversations = () =>  {
             const data = await getConversations()
             setConversations(data.map(normalize));
             setError(null);
-        } catch (error: any) {
-            setError(error?.response?.data?.detail ?? "Failed to fetch conversations");
+        } catch (error: unknown) {
+            setError(getErrorMessage(error, "Failed to fetch conversations"));
         } finally {
             setLoading(false);
         }
-    }, [currentUser?.id]);
+    }, [currentUser?.id, normalize]);
 
     useEffect(() => {
         refresh();
@@ -61,11 +66,12 @@ export const useConversations = () =>  {
             return {
                 ...c,
                 last_message: msg,
+                last_message_at: msg.created_at,
                 unread_count: c.id === currentConversationId ? 0 : (c.unread_count ?? 0) + 1
             };
         }).sort((a,b)=>{
-            let ta = a.last_message?.created_at ?? a.created_at;
-            let tb = b.last_message?.created_at ?? b.created_at;
+            const ta = a.last_message?.created_at ?? a.created_at;
+            const tb = b.last_message?.created_at ?? b.created_at;
             return new Date(tb).getTime() - new Date(ta).getTime();
         })
     })
@@ -101,14 +107,14 @@ export const useConversations = () =>  {
         return [normalized, ...prev];
     });
     return normalized;
-},[currentUser?.id]);
+},[currentUser?.id, normalize]);
 
 
 const startGroup = useCallback(async (name: string, participantIds: number[], avatarUrl?: string | null): Promise<Conversation> => {
- const conv = await createGroupConversation(name, participantIds, avatarUrl ?? "");
+ const conv = normalize(await createGroupConversation(name, participantIds, avatarUrl ?? ""));
  setConversations((prev)=> [conv, ...prev]);
  return conv;
-},[])
+},[normalize])
 
 const leaveConversation = useCallback(async (conversation_id: number): Promise<void> => {
     await apiLeave(conversation_id);
@@ -123,7 +129,7 @@ const deleteDirectConversation = useCallback(async (conversation_id: number): Pr
 const addParticipant = useCallback(async (conversation_id: number, participant_id: number): Promise<void> => {
     await apiAddParticipant(conversation_id, participant_id);
     refresh();
-},[])
+},[refresh])
 
 return{
     conversations,

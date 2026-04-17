@@ -1,116 +1,310 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from collections import defaultdict
+from datetime import datetime, timezone
+import json
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import and_, or_, delete
 from sqlalchemy.future import select
-from database import get_db
-from models import User
-from schemas import UserResponse, UserSearch
+from sqlalchemy.orm import aliased
+
 from auth import get_current_user
-from limiter import limiter
-from models import Conversation, Participants, Message                                              
-from schemas import ConversationResponse, MessageResponse, ParticipantResponse, ParticipantCreate, DirectConversationCreate, GroupConversationCreate, ConversationListItem
-from redis_client import get_unread_count, is_user_online
+from database import get_db
+from models import Conversation, Message, Participants, User
+from redis_client import get_unread_counts, redis_client
+from schemas import (
+    ConversationListItem,
+    ConversationParticipantResponse,
+    ConversationResponse,
+    DirectConversationCreate,
+    GroupConversationCreate,
+    GroupConversationUpdate,
+    MessageResponse,
+    ParticipantCreate,
+    ParticipantResponse,
+    UserResponse,
+    UserSearch,
+)
 
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
+
+def build_user_search(user: User) -> UserSearch:
+    return UserSearch(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        avatar_url=user.avatar_url,
+    )
+
+
+def build_user_response(user: User, is_online: bool = False) -> UserResponse:
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        avatar_url=user.avatar_url,
+        last_seen=user.last_seen,
+        is_online=is_online,
+        created_at=user.created_at,
+        updated_at=user.updated_at,
+    )
+
+
+def build_participant_response(
+    participant: Participants,
+    user: User,
+    online_map: dict[int, bool] | None = None,
+) -> ConversationParticipantResponse:
+    return ConversationParticipantResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        avatar_url=user.avatar_url,
+        last_seen=user.last_seen,
+        is_online=online_map.get(user.id, False) if online_map else False,
+        created_at=user.created_at,
+        updated_at=user.updated_at,
+        is_admin=participant.is_admin,
+        joined_at=participant.joined_at,
+    )
+
+
+def build_message_response(message: Message, sender: User | None) -> MessageResponse:
+    return MessageResponse(
+        id=message.id,
+        conversation_id=message.conversation_id,
+        message_type=message.message_type,
+        content=message.content,
+        file_url=message.file_url,
+        status=message.status,
+        language=message.language,
+        is_deleted=message.is_deleted,
+        created_at=message.created_at,
+        updated_at=message.updated_at,
+        sender=build_user_search(sender) if sender else UserSearch(
+            id=message.sender_id,
+            email="",
+            full_name=None,
+            avatar_url=None,
+        ),
+    )
+
+
+async def get_online_map(user_ids: list[int]) -> dict[int, bool]:
+    unique_ids = list(dict.fromkeys(user_ids))
+    if not unique_ids:
+        return {}
+    statuses = await redis_client.mget([f"user:{user_id}:online" for user_id in unique_ids])
+    return {
+        user_id: status is not None
+        for user_id, status in zip(unique_ids, statuses)
+    }
+
+
+async def fetch_conversation_participant_rows(
+    db: AsyncSession,
+    conversation_id: int,
+) -> list[tuple[Participants, User]]:
+    result = await db.execute(
+        select(Participants, User)
+        .join(User, User.id == Participants.user_id)
+        .where(Participants.conversation_id == conversation_id)
+        .order_by(Participants.joined_at.asc(), Participants.id.asc())
+    )
+    return list(result.all())
+
+
+async def fetch_participants_for_conversations(
+    db: AsyncSession,
+    conversation_ids: list[int],
+) -> dict[int, list[tuple[Participants, User]]]:
+    if not conversation_ids:
+        return {}
+    result = await db.execute(
+        select(Participants, User)
+        .join(User, User.id == Participants.user_id)
+        .where(Participants.conversation_id.in_(conversation_ids))
+        .order_by(Participants.conversation_id.asc(), Participants.joined_at.asc(), Participants.id.asc())
+    )
+    grouped: dict[int, list[tuple[Participants, User]]] = defaultdict(list)
+    for participant, user in result.all():
+        grouped[participant.conversation_id].append((participant, user))
+    return grouped
+
+
+async def fetch_last_messages_for_conversations(
+    db: AsyncSession,
+    conversation_ids: list[int],
+) -> dict[int, tuple[Message, User | None]]:
+    if not conversation_ids:
+        return {}
+    ranked_messages = (
+        select(
+            Message.id.label("message_id"),
+            Message.conversation_id.label("conversation_id"),
+            func.row_number().over(
+                partition_by=Message.conversation_id,
+                order_by=(Message.created_at.desc(), Message.id.desc()),
+            ).label("row_num"),
+        )
+        .where(
+            and_(
+                Message.conversation_id.in_(conversation_ids),
+                Message.is_deleted == False,
+            )
+        )
+        .subquery()
+    )
+    sender_alias = aliased(User)
+    result = await db.execute(
+        select(Message, sender_alias)
+        .join(ranked_messages, Message.id == ranked_messages.c.message_id)
+        .join(sender_alias, sender_alias.id == Message.sender_id, isouter=True)
+        .where(ranked_messages.c.row_num == 1)
+    )
+    return {
+        message.conversation_id: (message, sender)
+        for message, sender in result.all()
+    }
+
+
+async def publish_membership_event(
+    conversation_id: int,
+    recipient_user_ids: list[int],
+    payload: dict,
+) -> None:
+    encoded = json.dumps(payload)
+    await redis_client.publish(f"chat:{conversation_id}", encoded)
+    for user_id in set(recipient_user_ids):
+        await redis_client.publish(f"user:{user_id}:messages", encoded)
+
+
+def build_conversation_response(
+    conversation: Conversation,
+    participants: list[tuple[Participants, User]],
+    current_user_id: int,
+    online_map: dict[int, bool] | None = None,
+) -> ConversationResponse:
+    current_participant = next(
+        (participant for participant, _ in participants if participant.user_id == current_user_id),
+        None,
+    )
+    other_user = None
+    if not conversation.is_group:
+        other_row = next(
+            ((participant, user) for participant, user in participants if user.id != current_user_id),
+            None,
+        )
+        if other_row:
+            _, other = other_row
+            other_user = build_user_response(other, is_online=online_map.get(other.id, False) if online_map else False)
+
+    return ConversationResponse(
+        id=conversation.id,
+        is_group=conversation.is_group,
+        group_name=conversation.group_name,
+        group_avatar_url=conversation.group_avatar_url,
+        created_by=conversation.created_by,
+        current_user_is_admin=current_participant.is_admin if current_participant else False,
+        other_user=other_user,
+        participants=[
+            build_participant_response(participant, user, online_map)
+            for participant, user in participants
+        ],
+        created_at=conversation.created_at,
+        updated_at=conversation.updated_at,
+    )
+
+
+def build_conversation_list_item(
+    conversation: Conversation,
+    participants: list[tuple[Participants, User]],
+    current_user_id: int,
+    unread_count: int,
+    last_message: Message | None,
+    last_sender: User | None,
+    online_map: dict[int, bool] | None = None,
+) -> ConversationListItem:
+    current_participant = next(
+        (participant for participant, _ in participants if participant.user_id == current_user_id),
+        None,
+    )
+    other_user = None
+    if not conversation.is_group:
+        other_row = next(
+            ((participant, user) for participant, user in participants if user.id != current_user_id),
+            None,
+        )
+        if other_row:
+            _, other = other_row
+            other_user = build_user_response(other, is_online=online_map.get(other.id, False) if online_map else False)
+
+    return ConversationListItem(
+        id=conversation.id,
+        is_group=conversation.is_group,
+        group_name=conversation.group_name,
+        group_avatar_url=conversation.group_avatar_url,
+        created_by=conversation.created_by,
+        current_user_is_admin=current_participant.is_admin if current_participant else False,
+        other_user=other_user,
+        last_message=build_message_response(last_message, last_sender) if last_message else None,
+        last_message_at=last_message.created_at if last_message else None,
+        unread_count=unread_count,
+        participants=[
+            build_participant_response(participant, user, online_map)
+            for participant, user in participants
+        ],
+        created_at=conversation.created_at,
+        updated_at=conversation.updated_at,
+    )
+
 # Get ALL conversations
 @router.get("/", response_model=list[ConversationListItem])
 async def get_conversations(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    current_participant = aliased(Participants)
     result = await db.execute(
-        select(Conversation)
-        .join(Participants, and_(
-            Participants.conversation_id == Conversation.id, 
-            Participants.user_id == current_user.id,
-            Participants.is_hidden == False
-            ))
-        .distinct()
-        .order_by(Conversation.updated_at.desc()))
-    conversations = result.scalars().all()
-    response = []
-    for conversation in conversations:
-        #  load all participants
-        participants_result = await db.execute(select(Participants).where(Participants.conversation_id == conversation.id))
-        participants = participants_result.scalars().all()
-
-        #  load participant users
-        participant_users = []
-        for participant in participants:
-            user_result = await db.execute(select(User).where(User.id == participant.user_id))
-            user = user_result.scalar_one_or_none()
-            if user:
-                participant_users.append(user)
-
-        # for 1-1 conversation
-        other_user = None
-        other_user_online = False
-
-        if not conversation.is_group and len(participant_users) == 2:
-            other_user = next((p for p in participant_users if p.id != current_user.id), None)
-            if other_user:
-                other_user_online = await is_user_online(other_user.id)
-
-        # get last message
-        last_message_result = await db.execute(select(Message).where(Message.conversation_id == conversation.id).where(Message.is_deleted == False).order_by(Message.created_at.desc()).limit(1))
-        last_message = last_message_result.scalar_one_or_none()
-
-        #  Build last message response
-        last_message_response = None
-        if last_message:
-            sender_result = await db.execute(select(User).where(User.id == last_message.sender_id))
-            sender = sender_result.scalar_one_or_none()
-            last_message_response = MessageResponse(
-                id=last_message.id,
-                conversation_id=last_message.conversation_id,
-                message_type=last_message.message_type,
-                content=last_message.content,
-                file_url=last_message.file_url,
-                status=last_message.status,
-                language=last_message.language,
-                is_deleted=last_message.is_deleted,
-                created_at=last_message.created_at,
-                updated_at=last_message.updated_at,
-                sender=UserSearch(
-                    id=sender.id,
-                    email=sender.email,
-                    full_name=sender.full_name,
-                    avatar_url=sender.avatar_url,
-                ) if sender else None
-            )
-        response.append(
-            ConversationListItem(
-                id=conversation.id,
-                is_group=conversation.is_group,
-                group_name=conversation.group_name,
-                group_avatar_url=conversation.group_avatar_url,
-                created_by=conversation.created_by,
-                other_user=UserResponse(
-                    id=other_user.id,
-                    email=other_user.email,
-                    full_name=other_user.full_name,
-                    avatar_url=other_user.avatar_url,
-                    is_online=other_user_online,
-                    last_seen=other_user.last_seen,
-                    created_at=other_user.created_at,
-                    updated_at=other_user.updated_at
-                    ) if other_user else None,
-                    
-                last_message=last_message_response,
-                last_message_at=last_message.created_at if last_message else None,
-                unread_count=await get_unread_count(current_user.id, conversation.id),
-                participants=[UserResponse(
-                    id=u.id,
-                    email=u.email,
-                    full_name=u.full_name,
-                    avatar_url=u.avatar_url,
-                    created_at=u.created_at,
-                    updated_at=u.updated_at
-                ) for u in participant_users],
-                created_at=conversation.created_at,
-                updated_at=conversation.updated_at
-            )
+        select(Conversation, current_participant)
+        .join(
+            current_participant,
+            and_(
+                current_participant.conversation_id == Conversation.id,
+                current_participant.user_id == current_user.id,
+                current_participant.is_hidden == False,
+            ),
         )
-    return response
+        .order_by(Conversation.updated_at.desc(), Conversation.id.desc())
+    )
+    conversation_rows = list(result.all())
+    if not conversation_rows:
+        return []
+
+    conversations = [conversation for conversation, _ in conversation_rows]
+    conversation_ids = [conversation.id for conversation in conversations]
+    participants_by_conversation = await fetch_participants_for_conversations(db, conversation_ids)
+    last_messages_by_conversation = await fetch_last_messages_for_conversations(db, conversation_ids)
+    unread_counts = await get_unread_counts(current_user.id)
+
+    participant_user_ids = [
+        user.id
+        for participant_rows in participants_by_conversation.values()
+        for _, user in participant_rows
+    ]
+    online_map = await get_online_map(participant_user_ids)
+
+    return [
+        build_conversation_list_item(
+            conversation=conversation,
+            participants=participants_by_conversation.get(conversation.id, []),
+            current_user_id=current_user.id,
+            unread_count=int(unread_counts.get(str(conversation.id), 0) or 0),
+            last_message=last_messages_by_conversation.get(conversation.id, (None, None))[0],
+            last_sender=last_messages_by_conversation.get(conversation.id, (None, None))[1],
+            online_map=online_map,
+        )
+        for conversation in conversations
+    ]
 
 #  Create Conversation
 @router.post("/direct", response_model=ConversationResponse)
@@ -134,36 +328,9 @@ async def create_direct_conversation(data:DirectConversationCreate, current_user
         participants_result = await db.execute(select(Participants).where(Participants.conversation_id == conv.id))
         part_ids = [p.user_id for p in participants_result.scalars().all()]
         if data.participant_id in part_ids and len(part_ids) == 2:
-            participants_result = await db.execute(select(User, Participants).join(Participants).where(Participants.conversation_id == conv.id))
-            participants = participants_result.scalars().all()
-            
-            return ConversationResponse(
-                id=conv.id,
-                is_group=conv.is_group,
-                group_name=conv.group_name,
-                group_avatar_url=conv.group_avatar_url,
-                created_by=conv.created_by,
-                other_user=UserSearch(
-                    id=other_user.id,
-                    email=other_user.email,
-                    full_name=other_user.full_name,
-                    avatar_url=other_user.avatar_url,
-                    last_seen=other_user.last_seen,
-                    created_at=other_user.created_at,
-                    updated_at=other_user.updated_at
-                )   ,
-                participants = [UserSearch(
-                    id=u.id,
-                    email=u.email,
-                    full_name=u.full_name,
-                    avatar_url=u.avatar_url,
-                    last_seen=u.last_seen,
-                    created_at=u.created_at,
-                    updated_at=u.updated_at
-                ) for u in participants],
-                created_at=conv.created_at,
-                updated_at=conv.updated_at
-            )
+            participant_rows = await fetch_conversation_participant_rows(db, conv.id)
+            online_map = await get_online_map([user.id for _, user in participant_rows])
+            return build_conversation_response(conv, participant_rows, current_user.id, online_map)
     #  Create conversation
     new_conversation = Conversation(
         is_group=False,
@@ -180,41 +347,9 @@ async def create_direct_conversation(data:DirectConversationCreate, current_user
     await db.commit()
     await db.refresh(new_conversation)
     
-    # load participants
-    participants_result = await db.execute(select(User).join(Participants).where(Participants.conversation_id == new_conversation.id))
-    participants = participants_result.scalars().all()
-
-    # Build response
-    response = ConversationResponse(
-        id=new_conversation.id,
-        is_group=new_conversation.is_group,
-        group_name=new_conversation.group_name,
-        group_avatar_url=new_conversation.group_avatar_url,
-        created_by=new_conversation.created_by,
-        other_user=UserSearch(
-            id=other_user.id,
-            email=other_user.email,
-            full_name=other_user.full_name,
-            avatar_url=other_user.avatar_url,
-            last_seen=other_user.last_seen,
-            is_online=await is_user_online(other_user.id),
-            created_at=other_user.created_at,
-            updated_at=other_user.updated_at
-        )   ,
-        participants=[UserSearch(
-            id=u.id,
-            email=u.email,
-            full_name=u.full_name,
-            avatar_url=u.avatar_url,
-            last_seen=u.last_seen,
-            created_at=u.created_at,
-            updated_at=u.updated_at
-        ) for u in participants],
-        created_at=new_conversation.created_at,
-        updated_at=new_conversation.updated_at
-    )
- 
-    return response
+    participant_rows = await fetch_conversation_participant_rows(db, new_conversation.id)
+    online_map = await get_online_map([user.id for _, user in participant_rows])
+    return build_conversation_response(new_conversation, participant_rows, current_user.id, online_map)
 
 #  Create Group conversation
 @router.post("/group", response_model=ConversationResponse)
@@ -249,29 +384,9 @@ async def create_group_conversation(data:GroupConversationCreate, current_user: 
     await db.commit()
     await db.refresh(new_conversation)
     
-    # load participants
-    participants_result = await db.execute(select(User).join(Participants).where(Participants.conversation_id == new_conversation.id))
-    participants = participants_result.scalars().all()
-
-    # Build response
-    return ConversationResponse(
-        id=new_conversation.id,
-        is_group=new_conversation.is_group,
-        group_name=new_conversation.group_name,
-        group_avatar_url=new_conversation.group_avatar_url,
-        created_by=new_conversation.created_by,
-        participants=[UserSearch(
-            id=u.id,
-            email=u.email,
-            full_name=u.full_name,
-            avatar_url=u.avatar_url,
-            last_seen=u.last_seen,
-            created_at=u.created_at,
-            updated_at=u.updated_at
-        ) for u in participants],
-        created_at=new_conversation.created_at,
-        updated_at=new_conversation.updated_at
-    )
+    participant_rows = await fetch_conversation_participant_rows(db, new_conversation.id)
+    online_map = await get_online_map([user.id for _, user in participant_rows])
+    return build_conversation_response(new_conversation, participant_rows, current_user.id, online_map)
 
 # Get Single conversation
 
@@ -288,36 +403,55 @@ async def get_conversation(conversation_id: int, current_user: User = Depends(ge
     if not participant_result.scalars().first():
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a participant in this conversation")
     
-    # load participants
-    participant_result = await db.execute(select(Participants).where(Participants.conversation_id == conversation.id))
-    participant_rows = participant_result.scalars().all()
+    participant_rows = await fetch_conversation_participant_rows(db, conversation.id)
+    online_map = await get_online_map([user.id for _, user in participant_rows])
+    return build_conversation_response(conversation, participant_rows, current_user.id, online_map)
 
-    participants = []
-    for p in participant_rows:
-        user_result = await db.execute(select(User).where(User.id == p.user_id))
-        user = user_result.scalar_one_or_none()
-        if user:
-            participants.append(user)
-    # Build response
-    response = ConversationResponse(
-        id=conversation.id,
-        is_group=conversation.is_group,
-        group_name=conversation.group_name,
-        group_avatar_url=conversation.group_avatar_url,
-        created_by=conversation.created_by,
-        participants=[UserSearch(
-            id=u.id,
-            email=u.email,
-            full_name=u.full_name,
-            avatar_url=u.avatar_url,
-            last_seen=u.last_seen,
-            created_at=u.created_at,
-            updated_at=u.updated_at
-        ) for u in participants],
-        created_at=conversation.created_at,
-        updated_at=conversation.updated_at
+
+@router.patch("/{conversation_id}", response_model=ConversationResponse)
+async def update_group_conversation(
+    conversation_id: int,
+    data: GroupConversationUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    conversation_result = await db.execute(select(Conversation).where(Conversation.id == conversation_id))
+    conversation = conversation_result.scalar_one_or_none()
+    if not conversation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    if not conversation.is_group:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only groups can be updated")
+
+    participant_result = await db.execute(
+        select(Participants).where(
+            and_(
+                Participants.conversation_id == conversation.id,
+                Participants.user_id == current_user.id,
+            )
+        )
     )
-    return response
+    participant = participant_result.scalar_one_or_none()
+    if not participant:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a participant in this conversation")
+    if not participant.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can update group settings")
+
+    if "group_name" in data.model_fields_set:
+        new_group_name = (data.group_name or "").strip()
+        if not new_group_name:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Group name cannot be empty")
+        conversation.group_name = new_group_name
+
+    if "group_avatar_url" in data.model_fields_set:
+        conversation.group_avatar_url = data.group_avatar_url
+
+    db.add(conversation)
+    await db.commit()
+    await db.refresh(conversation)
+
+    participant_rows = await fetch_conversation_participant_rows(db, conversation.id)
+    online_map = await get_online_map([user.id for _, user in participant_rows])
+    return build_conversation_response(conversation, participant_rows, current_user.id, online_map)
 
 
 #  Add participant to group
@@ -361,9 +495,27 @@ async def add_participant(conversation_id: int, data: ParticipantCreate, current
         is_admin=False
     )
     db.add(new_participant)
+    conversation.updated_at = datetime.now(timezone.utc)
 
     await db.commit()
     await db.refresh(new_participant)
+
+    participant_rows = await fetch_conversation_participant_rows(db, conversation.id)
+    await publish_membership_event(
+        conversation.id,
+        [member.id for _, member in participant_rows],
+        {
+            "type": "membership",
+            "action": "participant_added",
+            "conversation_id": conversation.id,
+            "group_name": conversation.group_name,
+            "actor_user_id": current_user.id,
+            "actor_full_name": current_user.full_name,
+            "target_user_id": user.id,
+            "target_full_name": user.full_name,
+            "target_avatar_url": user.avatar_url,
+        },
+    )
     
     return ParticipantResponse(
         id=new_participant.id,
@@ -378,6 +530,96 @@ async def add_participant(conversation_id: int, data: ParticipantCreate, current
             avatar_url=user.avatar_url
         )
     )
+
+
+@router.delete("/{conversation_id}/participants/{user_id}")
+async def remove_participant(
+    conversation_id: int,
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    conversation_result = await db.execute(select(Conversation).where(Conversation.id == conversation_id))
+    conversation = conversation_result.scalar_one_or_none()
+    if not conversation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    if not conversation.is_group:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot remove participants from 1-on-1 chat")
+    if user_id == current_user.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Use leave group to remove yourself")
+
+    admin_result = await db.execute(
+        select(Participants).where(
+            and_(
+                Participants.conversation_id == conversation_id,
+                Participants.user_id == current_user.id,
+            )
+        )
+    )
+    admin_participant = admin_result.scalar_one_or_none()
+    if not admin_participant:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a participant in this conversation")
+    if not admin_participant.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can remove participants")
+
+    target_result = await db.execute(
+        select(Participants).where(
+            and_(
+                Participants.conversation_id == conversation_id,
+                Participants.user_id == user_id,
+            )
+        )
+    )
+    target_participant = target_result.scalar_one_or_none()
+    if not target_participant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Participant not found")
+
+    target_user_result = await db.execute(select(User).where(User.id == user_id))
+    target_user = target_user_result.scalar_one_or_none()
+    if not target_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    await db.delete(target_participant)
+    await db.flush()
+
+    remaining_result = await db.execute(
+        select(Participants)
+        .where(Participants.conversation_id == conversation_id)
+        .order_by(Participants.joined_at.asc())
+    )
+    remaining_participants = remaining_result.scalars().all()
+    promoted_user = None
+
+    if not remaining_participants:
+        await db.delete(conversation)
+    elif target_participant.is_admin and not any(participant.is_admin for participant in remaining_participants):
+        remaining_participants[0].is_admin = True
+        promoted_user_result = await db.execute(select(User).where(User.id == remaining_participants[0].user_id))
+        promoted_user = promoted_user_result.scalar_one_or_none()
+        conversation.updated_at = datetime.now(timezone.utc)
+    elif remaining_participants:
+        conversation.updated_at = datetime.now(timezone.utc)
+    recipient_user_ids = [participant.user_id for participant in remaining_participants] + [target_user.id]
+
+    await db.commit()
+    await publish_membership_event(
+        conversation_id,
+        recipient_user_ids,
+        {
+            "type": "membership",
+            "action": "participant_removed",
+            "conversation_id": conversation_id,
+            "group_name": conversation.group_name,
+            "actor_user_id": current_user.id,
+            "actor_full_name": current_user.full_name,
+            "target_user_id": target_user.id,
+            "target_full_name": target_user.full_name,
+            "target_avatar_url": target_user.avatar_url,
+            "new_admin_user_id": promoted_user.id if promoted_user else None,
+            "new_admin_full_name": promoted_user.full_name if promoted_user else None,
+        },
+    )
+    return {"message": "Participant removed"}
 
 #  Leave the comversation
 
@@ -401,9 +643,47 @@ async def leave_or_delete_conversation(conversation_id: int, current_user: User 
     if conversation.is_group:
         # Anyone can leave a group
         await db.delete(participant)
+        await db.flush()
+
+        remaining_result = await db.execute(
+            select(Participants)
+            .where(Participants.conversation_id == conversation_id)
+            .order_by(Participants.joined_at.asc())
+        )
+        remaining_participants = remaining_result.scalars().all()
+        promoted_user = None
+
+        if not remaining_participants:
+            await db.delete(conversation)
+        elif participant.is_admin and not any(existing.is_admin for existing in remaining_participants):
+            remaining_participants[0].is_admin = True
+            promoted_user_result = await db.execute(select(User).where(User.id == remaining_participants[0].user_id))
+            promoted_user = promoted_user_result.scalar_one_or_none()
+            conversation.updated_at = datetime.now(timezone.utc)
+        elif remaining_participants:
+            conversation.updated_at = datetime.now(timezone.utc)
+        recipient_user_ids = [existing.user_id for existing in remaining_participants] + [current_user.id]
     else:
         participant.is_hidden = True
 
     await db.commit()
+    if conversation.is_group:
+        await publish_membership_event(
+            conversation_id,
+            recipient_user_ids,
+            {
+                "type": "membership",
+                "action": "participant_left",
+                "conversation_id": conversation_id,
+                "group_name": conversation.group_name,
+                "actor_user_id": current_user.id,
+                "actor_full_name": current_user.full_name,
+                "target_user_id": current_user.id,
+                "target_full_name": current_user.full_name,
+                "target_avatar_url": current_user.avatar_url,
+                "new_admin_user_id": promoted_user.id if promoted_user else None,
+                "new_admin_full_name": promoted_user.full_name if promoted_user else None,
+            },
+        )
     return {"message": "Left conversation"}    
     

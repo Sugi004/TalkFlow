@@ -27,6 +27,14 @@ async def update_me(user_update: UserUpdate, current_user: User = Depends(get_cu
     await db.refresh(current_user)
     return current_user
 
+@router.delete("/me/avatar", response_model=UserResponse)
+async def delete_my_avatar(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    current_user.avatar_url = None
+    db.add(current_user)
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user
+
 #  Search User
 
 @router.get("/search", response_model=list[UserSearch])
