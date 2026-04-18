@@ -14,6 +14,7 @@ from redis_client import (
     set_offline_status,
     reset_unread_count
 )
+from message_crypto import encrypt_message_content
 from models import User, Message, Participants, Conversation, MessageStatus
 import json
 import os
@@ -273,7 +274,7 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: int, token: 
                         new_message = Message(
                             conversation_id = conversation_id, 
                             sender_id = user.id,
-                            content = content,
+                            content = encrypt_message_content(content),
                             message_type = message_type,
                             file_url = file_url,
                             language = language,

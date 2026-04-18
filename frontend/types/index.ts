@@ -122,7 +122,7 @@ export interface WSMessage{
 export interface PresignedResponse{
     upload_url: string; // url to upload file to S3
     file_url: string; // url to store in messages
-    key: string;
+    content_type: string;
 }
 
 export interface UseWebSocketOptions {

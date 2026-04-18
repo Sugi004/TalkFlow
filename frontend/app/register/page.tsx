@@ -125,7 +125,7 @@ export default function Register() {
     const inputErr = "border-[#ff4d6d] focus:shadow-[0_0_0_3px_rgba(255,77,109,.12)]";
 
     return (
-        <div className="min-h-screen bg-[#080c10] flex items-center justify-center px-4 py-10 relative overflow-hidden">
+        <div className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden bg-[#080c10] px-4 py-6 sm:min-h-screen sm:py-10">
 
             {/* Grid */}
             <div
@@ -144,7 +144,7 @@ export default function Register() {
 
             {/* Card */}
             <div
-                className={`relative z-10 w-full max-w-[480px] bg-[#0d1117] border border-[#1e2a35] rounded-md overflow-hidden
+                className={`relative z-10 w-full max-w-[480px] overflow-hidden rounded-md border border-[#1e2a35] bg-[#0d1117]
           transition-all duration-500 ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-5"}`}
             >
                 {/* Window bar */}
@@ -158,7 +158,7 @@ export default function Register() {
                 </div>
 
                 {/* Body */}
-                <div className="px-10 py-9">
+                <div className="px-5 py-6 sm:px-10 sm:py-9">
 
                     {/* Logo */}
                     <div className="flex items-center gap-2 mb-5">
@@ -167,7 +167,7 @@ export default function Register() {
                     </div>
 
                     {/* Heading */}
-                    <div className="font-mono text-xl font-bold text-white mb-1 min-h-7">
+                    <div className="mb-1 min-h-7 font-mono text-lg font-bold text-white sm:text-xl">
                         <span className="text-[#5a7080]">$ </span>
                         {typed}
                         <span className={`text-cyan-400 transition-opacity duration-100 ${cursor ? "opacity-100" : "opacity-0"}`}>▌</span>

@@ -21,6 +21,36 @@ function formatTime(iso: string) {
     });
 }
 
+const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "ico", "avif"]);
+const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "webm", "m4v", "avi", "mkv"]);
+
+function getFileExtension(value?: string) {
+    if (!value) return "";
+    const clean = value.split("#", 1)[0].split("?", 1)[0];
+    const lastDot = clean.lastIndexOf(".");
+    if (lastDot === -1) return "";
+    return clean.slice(lastDot + 1).toLowerCase();
+}
+
+function attachmentName(msg: Message) {
+    if (msg.content?.trim()) return msg.content.trim();
+    if (!msg.file_url) return "attachment";
+    const cleanUrl = decodeURIComponent(msg.file_url.split("#", 1)[0].split("?", 1)[0]);
+    return cleanUrl.split("/").pop() ?? "attachment";
+}
+
+function attachmentKind(msg: Message): "image" | "video" | "file" | null {
+    if (!msg.file_url) return null;
+    if (msg.message_type === "image" || msg.message_type === "video" || msg.message_type === "file") {
+        if (msg.message_type !== "file") return msg.message_type;
+    }
+
+    const ext = getFileExtension(msg.content) || getFileExtension(msg.file_url);
+    if (IMAGE_EXTENSIONS.has(ext)) return "image";
+    if (VIDEO_EXTENSIONS.has(ext)) return "video";
+    return "file";
+}
+
 // Avatar
 type AvatarUser = Pick<User, "full_name" | "email" | "avatar_url">;
 
@@ -52,23 +82,27 @@ function StatusIcon({ status }: { status?: string }) {
 // Image /video / file preview
 
 function MediaContent({ msg }: { msg: Message }) {
-    if (msg.message_type === "image" && msg.file_url) return (
-        <a href={msg.file_url} target="_blank" rel="noopener noreferrer" className="block mt-2 rounded-lg overflow-hidden">
-            <img src={msg.file_url} alt="attachment" className="max-w-[280px] max-h-[200px] rounded border border-[#1e2a35] object-cover hover:opacity-90 transition-opacity" />
-        </a>
+    const kind = attachmentKind(msg);
+    const fileName = attachmentName(msg);
+
+    if (kind === "video" && msg.file_url) return (
+        <div className="mt-2 overflow-hidden rounded-lg border border-[#1e2a35] bg-[#060a0e]">
+            <video
+                src={msg.file_url}
+                controls
+                playsInline
+                preload="metadata"
+                className="max-h-[240px] max-w-[78vw] rounded object-cover sm:max-w-[320px]"
+            />
+        </div>
     )
-    if (msg.message_type === "video" && msg.file_url) return (
-        <a href={msg.file_url} target="_blank" rel="noopener noreferrer" className="block mt-2 rounded-lg overflow-hidden">
-            <video src={msg.file_url} className="max-w-[280px] max-h-[200px] rounded border border-[#1e2a35] object-cover hover:opacity-90 transition-opacity" />
-        </a>
-    )
-    if (msg.message_type === "file" && msg.file_url) {
-        const fileName = msg.file_url.split("/").pop() ?? "attachment";
+    if (kind === "file" && msg.file_url) {
         return (
             <a
                 href={msg.file_url}
                 target="_blank"
                 rel="noreferrer"
+                download={fileName}
                 className="inline-flex items-center gap-2 mt-1 bg-[#0d1117] border border-[#1e2a35] rounded px-3 py-2
           text-[12px] text-cyan-400 font-mono hover:border-cyan-400/30 transition-colors"
             >
@@ -86,6 +120,11 @@ function MediaContent({ msg }: { msg: Message }) {
 // Main componenet
 export default function MessageBubble({ message, isOwn, grouped, onDelete, onTranslate, translatedContent }: MessageBubbleProps) {
     const [hover, setHover] = useState(false);
+    const [previewOpen, setPreviewOpen] = useState(false);
+    const isCodeMessage = message.message_type === "code"
+    const mediaKind = attachmentKind(message);
+    const fileName = attachmentName(message);
+    const shouldRenderTextBubble = Boolean(message.content) && !mediaKind;
 
     if (message.is_deleted) {
         return (
@@ -113,7 +152,7 @@ export default function MessageBubble({ message, isOwn, grouped, onDelete, onTra
                 </div>
 
                 {/* Content */}
-                <div className={`flex flex-col max-w-[70%] ${isOwn ? "items-end" : "items-start"}`}>
+                <div className={`flex min-w-0 flex-col ${isCodeMessage ? "flex-1" : "max-w-[82%] sm:max-w-[70%]"} ${isOwn ? "items-end" : "items-start"}`}>
 
                     {/* Header row — sender name + time */}
                     {!grouped && (
@@ -129,8 +168,8 @@ export default function MessageBubble({ message, isOwn, grouped, onDelete, onTra
                         <CodeBlock code={message.content ?? ""} language={message.language} />
                     ) : (
                         <>
-                            {message.content && (
-                                <div className={`px-3.5 py-2 rounded-2xl text-[13px] font-mono leading-relaxed whitespace-pre-wrap wrap-break-word
+                            {shouldRenderTextBubble && (
+                                <div className={`break-words rounded-2xl px-3 py-2 text-[12.5px] font-mono leading-relaxed whitespace-pre-wrap sm:px-3.5 sm:text-[13px]
                         ${isOwn
                                         ? "bg-cyan-400/20 text-cyan-100 rounded-tr-sm"
                                         : "bg-[#0d1117] border border-[#1e2a35] text-[#c9d8e8] rounded-tl-sm"
@@ -142,7 +181,22 @@ export default function MessageBubble({ message, isOwn, grouped, onDelete, onTra
                                     )}
                                 </div>
                             )}
-                            <MediaContent msg={message} />
+                            {mediaKind === "image" && message.file_url ? (
+                                <button
+                                    type="button"
+                                    onClick={() => setPreviewOpen(true)}
+                                    className="mt-2 block overflow-hidden rounded-lg text-left"
+                                    title="View image"
+                                >
+                                    <img
+                                        src={message.file_url}
+                                        alt={fileName}
+                                        className="max-h-[220px] max-w-[78vw] rounded border border-[#1e2a35] object-cover transition-opacity hover:opacity-90 sm:max-w-[320px]"
+                                    />
+                                </button>
+                            ) : (
+                                <MediaContent msg={message} />
+                            )}
                         </>
                     )}
                     <div className="flex items-center gap-1 mt-0.5">
@@ -176,6 +230,35 @@ export default function MessageBubble({ message, isOwn, grouped, onDelete, onTra
                     </div>
                 )}
             </div>
+            {previewOpen && mediaKind === "image" && message.file_url && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 px-4 py-6 backdrop-blur-sm"
+                    onClick={() => setPreviewOpen(false)}
+                >
+                    <div
+                        className="w-full max-w-5xl rounded-2xl border border-[#1e2a35] bg-[#0d1117] p-3 shadow-2xl sm:p-4"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                            <p className="truncate text-[11px] text-[#4a6070] font-mono">{fileName}</p>
+                            <button
+                                type="button"
+                                onClick={() => setPreviewOpen(false)}
+                                className="shrink-0 rounded border border-[#1e2a35] px-2.5 py-1 text-[11px] text-[#c9d8e8] font-mono transition-colors hover:bg-[#1a2530]"
+                            >
+                                Close
+                            </button>
+                        </div>
+                        <div className="flex items-center justify-center">
+                            <img
+                                src={message.file_url}
+                                alt={fileName}
+                                className="max-h-[78vh] w-auto max-w-full rounded-xl object-contain"
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     )
 

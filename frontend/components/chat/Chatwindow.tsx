@@ -4,7 +4,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, Key
 import toast from "react-hot-toast"
 import { Message, ChatWindowProps } from "@/types"
 import { getMessages, deleteMessage, markAsRead } from "@/lib/messages"
-import { uploadFile, messageTypeFromMime } from "@/lib/uploads"
+import { uploadFile, messageTypeFromFile } from "@/lib/uploads"
 import { getSmartReply, summarizeConversation, translateMessage } from "@/lib/ai"
 import { useWebSocket } from "@/hooks/useWebSocket"
 import MessageBubble from "./Messagebubble"
@@ -76,7 +76,7 @@ function TypingIndicator({ users }: { users: string[] }) {
     if (!users.length) return null;
     const label = users.length === 1 ? `${users[0]} is typing...` : users.length === 2 ? `${users[0]} and ${users[1]} are typing...` : `${users.length} users are typing...`
     return (
-        <div className="flex items-center gap-2 px-5 pb-1.5">
+        <div className="flex items-center gap-2 px-4 pb-1.5 sm:px-5">
             <div className="wflex gap-[3px]">
                 {[0, 1, 2].map((i) =>
                     <span key={i}
@@ -153,8 +153,8 @@ function AiPanel({
         <>
             <div className="border-t border-[#1e2a35] bg-[#0a0e14]">
                 {/* Tab bar */}
-                <div className="flex items-center justify-between px-4 pt-3 pb-1">
-                    <div className="flex gap-1">
+                <div className="flex flex-col gap-2 px-4 pt-3 pb-1 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap gap-1">
                         {(["replies", "summary", "translate"] as const).map((t) => (
                             <button
                                 key={t}
@@ -203,7 +203,7 @@ function AiPanel({
                     {/* Translate */}
                     {tab === "translate" && (
                         <div className="mt-2 space-y-2">
-                            <div className="flex gap-2">
+                            <div className="flex flex-col gap-2 sm:flex-row">
                                 <input
                                     type="text"
                                     placeholder="Text to translate…"
@@ -214,7 +214,7 @@ function AiPanel({
                                 <select
                                     value={targetLang}
                                     onChange={(e) => setTargetLang(e.target.value)}
-                                    className="bg-[#060a0e] border border-[#1e2a35] rounded px-2 py-2 font-mono text-[12px] text-[#c9d8e8] outline-none focus:border-violet-500/40"
+                                    className="bg-[#060a0e] border border-[#1e2a35] rounded px-2 py-2 font-mono text-[12px] text-[#c9d8e8] outline-none focus:border-violet-500/40 sm:w-40"
                                 >
                                     {["Spanish", "French", "German", "Japanese", "Arabic", "Portuguese", "Chinese", "Hindi"].map((l) => (
                                         <option key={l}>{l}</option>
@@ -546,7 +546,7 @@ export default function ChatWindow({
 
         try {
             const url = await uploadFile(file, setUploadProgress);
-            const type = messageTypeFromMime(file.type);
+            const type = messageTypeFromFile(file);
             sendMessage(file.name, type, { file_url: url })
         }
         catch { }
@@ -601,11 +601,14 @@ export default function ChatWindow({
     const otherTyping = typingUsers.filter((u) => u.id !== currentUser?.id).map((u) => u.name)
     const isCodeBlock = input.trimStart().startsWith("```")
     const isMember = conversation?.is_group ? conversation.participants?.some((p) => p.id === currentUser?.id) : true;
+    const composerPlaceholder = conversation
+        ? `Message ${convDisplayName(conversation)}`
+        : "Type a message";
 
     if (!conversation) {
         return (
             <div className="flex-1 flex items-center justify-center bg-[#080c10]">
-                <div className="text-center">
+                <div className="px-6 text-center">
                     <div className="text-5xl mb-4">💬</div>
                     <p className="text-[15px] text-[#c9d8e8] font-semibold font-mono mb-1">Select a conversation</p>
                     <p className="text-[12px] text-[#4a6070] font-mono">Choose from the list or start a new one</p>
@@ -618,15 +621,11 @@ export default function ChatWindow({
         <>
             <div className="flex-1 flex flex-col min-w-0 bg-[#080c10]">
                 {/* Header */}
-                <header className="flex items-center gap-3 px-5 py-3 border-b border-[#1e2a35] bg-[#0d1117] shrink-0">
-                    {/* Avatar — ADD THIS BLOCK */}
-
-
+                <header className="flex shrink-0 flex-wrap items-start gap-3 border-b border-[#1e2a35] bg-[#0d1117] px-3 py-3 sm:px-5">
                     <ConvAvatar conv={conversation} />
 
-
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
                             <h1 className="text-[14px] font-bold text-[#c9d8e8] font-mono truncate">
                                 {convDisplayName(conversation)}
                             </h1>
@@ -644,7 +643,7 @@ export default function ChatWindow({
                             )}
                         </div>
                         {!conversation.is_group && conversation.other_user && (
-                            <p className="text-[11px] font-mono text-[#4a6070]">
+                            <p className="text-[11px] font-mono text-[#4a6070] break-words">
                                 {conversation.other_user.is_online
                                     ? "online"
                                     : conversation.other_user.last_seen
@@ -654,30 +653,31 @@ export default function ChatWindow({
                         )}
                     </div>
 
-                    {/* AI button */}
-                    <button
-                        onClick={() => setShowAiPanel((v) => !v)}
-                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono font-semibold transition-all
-            ${showAiPanel ? "bg-violet-500/20 text-violet-400 border border-violet-500/30" : "text-[#4a6070] hover:text-violet-400 hover:bg-violet-500/10 border border-transparent"}`}
-                        title="Gemini AI features"
-                    >
-                        <span>✦</span> AI
-                    </button>
-                    {conversation.is_group && (
+                    <div className="ml-auto flex items-center gap-1.5 self-start sm:gap-2">
                         <button
-                            type="button"
-                            onClick={() => setShowGroupInfo(true)}
-                            className="flex items-center gap-1.5 rounded border border-transparent px-2.5 py-1 text-[11px] font-mono font-semibold text-[#4a6070] transition-all hover:border-cyan-400/20 hover:bg-cyan-400/10 hover:text-cyan-400"
-                            title="Open group info"
+                            onClick={() => setShowAiPanel((v) => !v)}
+                            className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-mono font-semibold transition-all sm:gap-1.5 sm:px-2.5
+            ${showAiPanel ? "bg-violet-500/20 text-violet-400 border border-violet-500/30" : "text-[#4a6070] hover:text-violet-400 hover:bg-violet-500/10 border border-transparent"}`}
+                            title="Gemini AI features"
                         >
-                            <span>☰</span> Group
+                            <span>✦</span> AI
                         </button>
-                    )}
+                        {conversation.is_group && (
+                            <button
+                                type="button"
+                                onClick={() => setShowGroupInfo(true)}
+                                className="flex items-center gap-1 rounded border border-transparent px-2 py-1 text-[11px] font-mono font-semibold text-[#4a6070] transition-all hover:border-cyan-400/20 hover:bg-cyan-400/10 hover:text-cyan-400 sm:gap-1.5 sm:px-2.5"
+                                title="Open group info"
+                            >
+                                <span>☰</span> Group
+                            </button>
+                        )}
+                    </div>
                 </header>
                 {/* Messages */}
                 <div
                     ref={messagesContainerRef}
-                    className="flex-1 overflow-y-auto"
+                    className="flex-1 overflow-y-auto overscroll-contain"
                 >
                     <div ref={messagesTopRef} />
 
@@ -704,7 +704,7 @@ export default function ChatWindow({
                         {withDivs.map((item) => {
                             if ("_divider" in item) {
                                 return (
-                                    <div key={item._key} className="flex items-center gap-3 my-5 px-5">
+                                    <div key={item._key} className="my-5 flex items-center gap-3 px-3 sm:px-5">
                                         <div className="flex-1 h-px bg-[#1e2a35]" />
                                         <span className="text-[9.5px] text-[#3a4a55] font-mono tracking-widest uppercase">
                                             {item._divider}
@@ -745,7 +745,7 @@ export default function ChatWindow({
 
                 {/* Input */}
                 {isMember ? (
-                    <div className="px-4 pb-4 pt-2 shrink-0">
+                    <div className="shrink-0 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-2 sm:px-4 sm:pb-4">
                         {/* Upload progress */}
                         {uploading && (
                             <div className="mb-2 flex items-center gap-2">
@@ -760,8 +760,14 @@ export default function ChatWindow({
                             </div>
                         )}
 
+                        {!connected && (
+                            <p className="mb-2 px-1 text-[10px] text-[#ff4d6d] font-mono">
+                                Connecting… please wait before sending.
+                            </p>
+                        )}
+
                         <div
-                            className={`flex items-end gap-2.5 bg-[#0d1117] border rounded-md px-3.5 py-2.5 transition-all
+                            className={`flex items-end gap-2 rounded-md border bg-[#0d1117] px-3 py-2 transition-all sm:gap-2.5 sm:px-3.5 sm:py-2.5
                             ${isCodeBlock
                                     ? "border-amber-500/40 shadow-[0_0_0_3px_rgba(245,158,11,.06)]"
                                     : "border-[#1e2a35] focus-within:border-cyan-400/50 focus-within:shadow-[0_0_0_3px_rgba(0,204,255,.05)]"
@@ -776,11 +782,6 @@ export default function ChatWindow({
                             >
                                 ⊕
                             </button>
-                            {!connected && (
-                                <p className="text-[10px] text-[#ff4d6d] font-mono px-1 mb-1">
-                                    ⚠ Connecting… please wait before sending
-                                </p>
-                            )}
                             <input ref={fileRef} type="file" className="hidden" onChange={handleFileUpload} />
 
                             {/* Textarea */}
@@ -789,9 +790,9 @@ export default function ChatWindow({
                                 value={input}
                                 onChange={handleInputChange}
                                 onKeyDown={handleKeyDown}
-                                placeholder={`Message ${convDisplayName(conversation)} · \`\`\`lang for code`}
+                                placeholder={`${composerPlaceholder} · \`\`\`lang for code`}
                                 rows={1}
-                                className={`flex-1 bg-transparent resize-none outline-none font-mono text-[13px] leading-relaxed
+                                className={`flex-1 bg-transparent resize-none outline-none font-mono text-[12.5px] leading-relaxed sm:text-[13px]
                                 placeholder-[#364a58] overflow-y-auto caret-cyan-400
                                 ${isCodeBlock ? "text-amber-300" : "text-[#c9d8e8]"}`}
                                 style={{ maxHeight: "144px", scrollbarWidth: "none" }}
@@ -808,7 +809,7 @@ export default function ChatWindow({
                             <button
                                 onClick={handleSend}
                                 disabled={!input.trim() || uploading || !connected}
-                                className="shrink-0 mb-0.5 w-7 h-7 flex items-center justify-center rounded transition-all
+                                className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded transition-all
                 bg-cyan-400/10 text-cyan-400 hover:bg-cyan-400/20
                 disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                                 title="Send (Enter)"
@@ -817,7 +818,10 @@ export default function ChatWindow({
                             </button>
                         </div>
 
-                        <p className="text-[9.5px] text-[#2e3e4a] font-mono mt-1.5 px-1">
+                        <p className="mt-1.5 px-1 text-[9.5px] text-[#2e3e4a] font-mono sm:hidden">
+                            Enter send · Shift+Enter newline
+                        </p>
+                        <p className="mt-1.5 hidden px-1 text-[9.5px] text-[#2e3e4a] font-mono sm:block">
                             <span className="text-[#3a4a55]">Enter</span> send ·{" "}
                             <span className="text-[#3a4a55]">Shift+Enter</span> newline ·{" "}
                             <span className="text-amber-600">```lang</span> code block

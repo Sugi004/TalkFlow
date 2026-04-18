@@ -197,9 +197,9 @@ export default function GroupInfoModal({
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
-            <div className="w-full max-w-2xl rounded-2xl border border-[#1e2a35] bg-[#0d1117] shadow-2xl">
-                <div className="flex items-center justify-between border-b border-[#1e2a35] px-5 py-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 px-0 backdrop-blur-sm sm:items-center sm:px-4">
+            <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border border-[#1e2a35] bg-[#0d1117] shadow-2xl sm:rounded-2xl">
+                <div className="flex items-center justify-between border-b border-[#1e2a35] px-4 py-4 sm:px-5">
                     <div>
                         <h2 className="text-[14px] font-bold text-[#c9d8e8] font-mono">Group Info</h2>
                         <p className="text-[11px] text-[#4a6070] font-mono">
@@ -212,12 +212,12 @@ export default function GroupInfoModal({
                 </div>
 
                 {loading ? (
-                    <div className="flex h-64 items-center justify-center gap-2">
+                    <div className="flex h-48 items-center justify-center gap-2 sm:h-64">
                         <span className="h-5 w-5 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
                         <span className="text-[12px] text-[#4a6070] font-mono">Loading group details…</span>
                     </div>
                 ) : (
-                    <div className="grid gap-6 px-5 py-5 md:grid-cols-[280px_minmax(0,1fr)]">
+                    <div className="grid gap-4 overflow-y-auto px-4 py-4 sm:gap-6 sm:px-5 sm:py-5 md:grid-cols-[280px_minmax(0,1fr)]">
                         <div className="space-y-4">
                             <div className="flex flex-col items-center gap-3 rounded-2xl border border-[#1e2a35] bg-[#0a0e14] p-5">
                                 {avatarUrl ? (
@@ -326,7 +326,7 @@ export default function GroupInfoModal({
                                     {results.length > 0 && (
                                         <div className="mt-3 space-y-2">
                                             {results.map((result) => (
-                                                <div key={result.id} className="flex items-center gap-3 rounded-lg border border-[#1e2a35] bg-[#0d1117] px-3 py-2">
+                                            <div key={result.id} className="flex items-center gap-3 rounded-lg border border-[#1e2a35] bg-[#0d1117] px-3 py-2">
                                                     <div className={`flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-bold ${getAvatarColor(result.full_name ?? result.email)}`}>
                                                         {getInitials(result.full_name ?? result.email)}
                                                     </div>
@@ -358,7 +358,7 @@ export default function GroupInfoModal({
                                         const canRemove = isAdmin && member.id !== currentUser?.id
                                         const isCurrentUser = member.id === currentUser?.id
                                         return (
-                                            <div key={member.id} className="flex items-center gap-3 rounded-lg border border-[#1e2a35] bg-[#0d1117] px-3 py-2.5">
+                                            <div key={member.id} className="flex items-start gap-3 rounded-lg border border-[#1e2a35] bg-[#0d1117] px-3 py-2.5 sm:items-center">
                                                 {member.avatar_url ? (
                                                     <img src={member.avatar_url} alt={member.full_name ?? member.email} className="h-9 w-9 rounded-full object-cover" />
                                                 ) : (
@@ -389,7 +389,7 @@ export default function GroupInfoModal({
                                                         type="button"
                                                         onClick={() => handleRemoveParticipant(member.id)}
                                                         disabled={removingUserId === member.id}
-                                                        className="rounded-full border border-[#ff4d6d]/30 px-3 py-1 text-[11px] text-[#ff4d6d] font-mono hover:bg-[#ff4d6d]/10 disabled:opacity-50"
+                                                        className="self-start rounded-full border border-[#ff4d6d]/30 px-3 py-1 text-[11px] text-[#ff4d6d] font-mono hover:bg-[#ff4d6d]/10 disabled:opacity-50"
                                                     >
                                                         {removingUserId === member.id ? "Removing…" : "Remove"}
                                                     </button>

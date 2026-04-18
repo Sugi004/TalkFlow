@@ -4,6 +4,7 @@ from sqlalchemy.future import select
 from sqlalchemy import and_
 from database import get_db
 from auth import get_current_user
+from message_crypto import decrypt_message_content
 from models import User, Message, Participants, Conversation
 from schemas import SummarizeResponse, SummarizeRequest, SmartReplyResponse, SmartReplyRequest, TranslateResponse, TranslateRequest        
 import google.generativeai as genai
@@ -47,12 +48,20 @@ async def summarize_conversation(data: SummarizeRequest, current_user: User = De
     )
     messages = messages_result.scalars().all()
     messages = list(reversed(messages))
+    decrypted_messages = [
+        (message.sender_id, decrypt_message_content(message.content))
+        for message in messages
+    ]
 
-    if not messages:
+    if not decrypted_messages:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No messages found")
     
     #  Build messages for claude
-    conversation_text = "\n".join([f"User: {message.sender_id}: {message.content}" for message in messages if message.content])
+    conversation_text = "\n".join(
+        f"User: {sender_id}: {content}"
+        for sender_id, content in decrypted_messages
+        if content
+    )
     
     #  Call claude
     response = model.generate_content(
@@ -87,7 +96,8 @@ async def suggest_replies(
         ).order_by(Message.created_at.desc()).limit(1))
 
     last_message = last_message_result.scalars().first()
-    if not last_message or not last_message.content:
+    last_message_content = decrypt_message_content(last_message.content) if last_message else None
+    if not last_message or not last_message_content:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No messages to reply to"
@@ -95,7 +105,7 @@ async def suggest_replies(
 
     #  Call gemini API
     response = model.generate_content(
-       f"""Generate 3 very short casual reply suggestion for this message. {last_message.content}"
+       f"""Generate 3 very short casual reply suggestion for this message. {last_message_content}"
              
             Rules:
             - Reply should be short (5-10 words)

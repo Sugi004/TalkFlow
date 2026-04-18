@@ -13,6 +13,7 @@ import { uploadFile } from "@/lib/uploads"
 import { getErrorMessage } from "@/lib/auth"
 
 const AVATAR_EDITOR_SIZE = 288
+const MIN_AVATAR_EDITOR_SIZE = 220
 
 function formatDate(iso?: string) {
     if (!iso) return "-";
@@ -41,6 +42,7 @@ export default function ProfilePage() {
     const [editorOffsetX, setEditorOffsetX] = useState(0)
     const [editorOffsetY, setEditorOffsetY] = useState(0)
     const [editorImageSize, setEditorImageSize] = useState<{ width: number; height: number } | null>(null)
+    const [editorSize, setEditorSize] = useState(AVATAR_EDITOR_SIZE)
 
     const fileInputRef = useRef<HTMLInputElement>(null)
     const editorImageRef = useRef<HTMLImageElement>(null)
@@ -62,6 +64,20 @@ export default function ProfilePage() {
                 setLoading(false)
             })
     }, [isAuthenticated, logout, router])
+
+    useEffect(() => {
+        const updateEditorSize = () => {
+            const nextSize = Math.max(
+                MIN_AVATAR_EDITOR_SIZE,
+                Math.min(AVATAR_EDITOR_SIZE, window.innerWidth - 72)
+            )
+            setEditorSize(nextSize)
+        }
+
+        updateEditorSize()
+        window.addEventListener("resize", updateEditorSize)
+        return () => window.removeEventListener("resize", updateEditorSize)
+    }, [])
 
     async function handleSave() {
         if (!user) return;
@@ -124,13 +140,13 @@ export default function ProfilePage() {
             return null
         }
 
-        const coverScale = Math.max(AVATAR_EDITOR_SIZE / naturalWidth, AVATAR_EDITOR_SIZE / naturalHeight) * editorZoom
+        const coverScale = Math.max(editorSize / naturalWidth, editorSize / naturalHeight) * editorZoom
         const width = naturalWidth * coverScale
         const height = naturalHeight * coverScale
-        const overflowX = Math.max(0, width - AVATAR_EDITOR_SIZE)
-        const overflowY = Math.max(0, height - AVATAR_EDITOR_SIZE)
-        const left = (AVATAR_EDITOR_SIZE - width) / 2 - overflowX * (editorOffsetX / 100)
-        const top = (AVATAR_EDITOR_SIZE - height) / 2 - overflowY * (editorOffsetY / 100)
+        const overflowX = Math.max(0, width - editorSize)
+        const overflowY = Math.max(0, height - editorSize)
+        const left = (editorSize - width) / 2 - overflowX * (editorOffsetX / 100)
+        const top = (editorSize - height) / 2 - overflowY * (editorOffsetY / 100)
 
         return {
             naturalWidth,
@@ -153,7 +169,7 @@ export default function ProfilePage() {
         if (!layout) {
             throw new Error("Image dimensions are unavailable")
         }
-        const sourceSize = AVATAR_EDITOR_SIZE / layout.coverScale
+        const sourceSize = editorSize / layout.coverScale
         const sourceX = Math.min(
             Math.max(0, -layout.left / layout.coverScale),
             Math.max(0, layout.naturalWidth - sourceSize)
@@ -243,7 +259,7 @@ export default function ProfilePage() {
 
     return (
         <>
-            <div className="min-h-screen bg-[#080c10] flex items-center justify-center px-4 py-10 relative overflow-hidden font-mono">
+            <div className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden bg-[#080c10] px-4 py-6 font-mono sm:min-h-screen sm:py-10">
                 {/* Grid */}
                 <div
                     className="fixed inset-0 pointer-events-none"
@@ -260,7 +276,7 @@ export default function ProfilePage() {
                     style={{ background: "radial-gradient(circle,rgba(0,255,157,.07) 0%,transparent 70%)" }} />
                 {/* Card */}
                 <div
-                    className={`relative z-10 w-full max-w-[460px] bg-[#0d1117] border border-[#1e2a35] rounded-md overflow-hidden
+                    className={`relative z-10 w-full max-w-[460px] overflow-hidden rounded-md border border-[#1e2a35] bg-[#0d1117]
           transition-all duration-500 ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-5"}`}
                 >
                     {/* Window bar */}
@@ -273,10 +289,10 @@ export default function ProfilePage() {
                         </span>
                     </div>
 
-                    <div className="px-9 py-8">
+                    <div className="px-5 py-6 sm:px-9 sm:py-8">
 
                         {/* Nav */}
-                        <div className="flex items-center justify-between mb-7">
+                        <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <Link href="/chat" className="flex items-center gap-1.5 text-[11px] text-[#4a6070] hover:text-cyan-400 transition-colors font-mono">
                                 ← Back to chat
                             </Link>
@@ -427,7 +443,7 @@ export default function ProfilePage() {
             {showAvatarViewer && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 px-4">
                     <div className="w-full max-w-xl">
-                        <div className="mb-4 flex items-center justify-between">
+                        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <button
                                 type="button"
                                 onClick={() => setShowAvatarViewer(false)}
@@ -435,7 +451,7 @@ export default function ProfilePage() {
                             >
                                 Close
                             </button>
-                            <div className="flex items-center gap-3">
+                            <div className="flex flex-wrap items-center gap-3">
                                 <button
                                     type="button"
                                     onClick={() => fileInputRef.current?.click()}
@@ -455,7 +471,7 @@ export default function ProfilePage() {
                                 )}
                             </div>
                         </div>
-                        <div className="rounded-3xl border border-[#1e2a35] bg-[#0d1117] p-6 shadow-2xl">
+                        <div className="rounded-3xl border border-[#1e2a35] bg-[#0d1117] p-4 shadow-2xl sm:p-6">
                             <div className="flex items-center justify-center">
                                 {user?.avatar_url ? (
                                     <img
@@ -478,9 +494,9 @@ export default function ProfilePage() {
                 </div>
             )}
             {showAvatarEditor && pendingAvatar && (
-                <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/90 px-4">
-                    <div className="w-full max-w-2xl rounded-3xl border border-[#1e2a35] bg-[#0d1117] p-6 shadow-2xl">
-                        <div className="mb-5 flex items-center justify-between">
+                <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/90 px-4 py-4">
+                    <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-[#1e2a35] bg-[#0d1117] p-4 shadow-2xl sm:p-6">
+                        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                                 <p className="text-[16px] font-semibold text-[#c9d8e8]">Adjust Profile Photo</p>
                                 <p className="text-[11px] text-[#4a6070] font-mono">Crop and position your photo before saving.</p>
@@ -497,7 +513,10 @@ export default function ProfilePage() {
 
                         <div className="grid gap-6 md:grid-cols-[320px_minmax(0,1fr)]">
                             <div className="flex flex-col items-center gap-4">
-                                <div className="relative h-72 w-72 overflow-hidden rounded-[28px] border border-[#1e2a35] bg-[#060a0e]">
+                                <div
+                                    className="relative overflow-hidden rounded-[28px] border border-[#1e2a35] bg-[#060a0e]"
+                                    style={{ width: editorSize, height: editorSize }}
+                                >
                                     <img
                                         ref={editorImageRef}
                                         src={pendingAvatar.src}
@@ -515,8 +534,8 @@ export default function ProfilePage() {
                                             left: `${editorLayout.left}px`,
                                             top: `${editorLayout.top}px`,
                                         } : {
-                                            width: `${AVATAR_EDITOR_SIZE}px`,
-                                            height: `${AVATAR_EDITOR_SIZE}px`,
+                                            width: `${editorSize}px`,
+                                            height: `${editorSize}px`,
                                             left: 0,
                                             top: 0,
                                             objectFit: "cover",
@@ -526,7 +545,7 @@ export default function ProfilePage() {
                                 </div>
 
                                 {uploading && (
-                                    <div className="w-72">
+                                    <div style={{ width: editorSize }}>
                                         <div className="h-1 overflow-hidden rounded-full bg-[#1e2a35]">
                                             <div className="h-full bg-cyan-400 transition-all" style={{ width: `${uploadPct}%` }} />
                                         </div>

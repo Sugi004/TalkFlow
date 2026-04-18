@@ -114,8 +114,8 @@ function NewChatModel({
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="w-full max-w-sm bg-[#0d1117] border border-[#1e2a35] rounded-md overflow-hidden shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-4 py-4 backdrop-blur-sm sm:items-center">
+            <div className="max-h-[85vh] w-full max-w-sm overflow-hidden rounded-2xl border border-[#1e2a35] bg-[#0d1117] shadow-2xl">
 
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-[#1e2a35]">
@@ -123,7 +123,7 @@ function NewChatModel({
                     <button onClick={onClose} className="text-[#4a6070] hover:text-[#c9d8e8] transition-colors text-lg leading-none">✕</button>
                 </div>
 
-                <div className="p-5 space-y-4">
+                <div className="max-h-[calc(85vh-4.25rem)] space-y-4 overflow-y-auto p-4 sm:p-5">
                     {/* Mode toggle */}
                     <div className="flex gap-1 bg-[#060a0e] rounded p-1">
                         {(["direct", "group"] as const).map((m) => (
@@ -244,7 +244,7 @@ export default function Chatlist({
 
     return (
         <>
-            <aside className="w-64 flex flex-col bg-[#0a0e14] border-r border-[#1e2a35] h-full shrink-0">
+            <aside className="flex h-full w-[min(22rem,100vw)] shrink-0 flex-col border-r border-[#1e2a35] bg-[#0a0e14] md:w-72">
 
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3.5 border-b border-[#1e2a35]">
@@ -328,7 +328,7 @@ export default function Chatlist({
                                     {/* 3-dot menu */}
                                     <button
                                         onClick={(e) => { e.stopPropagation(); setMenuConvId(menuConvId === conv.id ? null : conv.id); }}
-                                        className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded text-[#4a6070] hover:text-[#c9d8e8] hover:bg-[#1e2a35] transition-all text-xs shrink-0"
+                                        className="h-6 w-6 shrink-0 rounded text-xs text-[#4a6070] opacity-100 transition-all hover:bg-[#1e2a35] hover:text-[#c9d8e8] md:opacity-0 md:group-hover:opacity-100"
                                     >
                                         ⋮
                                     </button>

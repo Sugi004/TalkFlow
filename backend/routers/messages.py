@@ -6,6 +6,7 @@ from database import get_db
 from models import User, Message, Participants, MessageStatus
 from schemas import MessageResponse, MessageCreate, UserSearch
 from auth import get_current_user
+from message_crypto import decrypt_message_content, encrypt_message_content
 from typing import List
 
 from redis_client import (
@@ -88,7 +89,7 @@ async def get_messages(conversation_id: int,skip: int = 0, limit: int = 50, curr
                     id=message.id,
                     conversation_id=message.conversation_id,
                     message_type=message.message_type,
-                    content=message.content,
+                    content=decrypt_message_content(message.content),
                     file_url=message.file_url,
                     language=message.language,
                     status=final_status,
@@ -131,7 +132,7 @@ async def send_message(conversation_id: int, message: MessageCreate, current_use
     new_message = Message(
         conversation_id=conversation_id,
         sender_id=current_user.id,
-        content=message.content,
+        content=encrypt_message_content(message.content),
         message_type=message.message_type,
         file_url=message.file_url,
         language=message.language,
@@ -156,7 +157,7 @@ async def send_message(conversation_id: int, message: MessageCreate, current_use
         id=new_message.id,
         conversation_id=new_message.conversation_id,
         message_type=new_message.message_type,
-        content=new_message.content,
+        content=message.content,
         file_url=new_message.file_url,
         language=new_message.language,
         is_deleted=new_message.is_deleted,

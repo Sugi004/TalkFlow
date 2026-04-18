@@ -10,6 +10,7 @@ from sqlalchemy.orm import aliased
 
 from auth import get_current_user
 from database import get_db
+from message_crypto import decrypt_message_content
 from models import Conversation, Message, Participants, User
 from redis_client import get_unread_counts, redis_client
 from schemas import (
@@ -76,7 +77,7 @@ def build_message_response(message: Message, sender: User | None) -> MessageResp
         id=message.id,
         conversation_id=message.conversation_id,
         message_type=message.message_type,
-        content=message.content,
+        content=decrypt_message_content(message.content),
         file_url=message.file_url,
         status=message.status,
         language=message.language,

@@ -14,6 +14,7 @@ export default function ChatPage() {
     const router = useRouter();
     const { isAuthenticated, logout, token, currentUser } = useAuth();
     const [activeConvId, setActiveConvId] = useState<number | null>(null);
+    const [isMobile, setIsMobile] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [showLeaveModal, setShowLeaveModal] = useState(false);
     const [lastReadConvId, setLastReadConvId] = useState<number | null>(null);
@@ -41,6 +42,18 @@ export default function ChatPage() {
             return
         }
     }, [isAuthenticated, router]);
+
+    useEffect(() => {
+        const syncViewport = () => {
+            const mobile = window.innerWidth < 768;
+            setIsMobile(mobile);
+            setSidebarOpen((prev) => (mobile ? (activeConvId === null ? true : prev) : true));
+        };
+
+        syncViewport();
+        window.addEventListener("resize", syncViewport);
+        return () => window.removeEventListener("resize", syncViewport);
+    }, [activeConvId]);
 
     // Protect accidental closure
     useEffect(() => {
@@ -88,6 +101,9 @@ export default function ChatPage() {
             ) {
                 setActiveConvId(null);
                 setExternalMessage(null);
+                if (isMobile) {
+                    setSidebarOpen(true);
+                }
             }
         },
     })
@@ -123,6 +139,9 @@ export default function ChatPage() {
         await deleteDirectConversation(conversationId);
         if (activeConv?.id === conversationId) {
             setActiveConvId(null);
+            if (isMobile) {
+                setSidebarOpen(true);
+            }
         }
     }
 
@@ -139,7 +158,7 @@ export default function ChatPage() {
 
     return (
         <>
-            <div className="flex h-screen bg-[#080c10] overflow-hidden">
+            <div className="flex h-dvh min-h-[100dvh] bg-[#080c10] overflow-hidden">
 
                 {/* Sidebar toggle for mobile */}
                 <button
@@ -159,7 +178,7 @@ export default function ChatPage() {
 
                 {/* Chat list sidebar */}
                 <div
-                    className={`fixed md:relative z-30 md:z-auto h-full transition-transform duration-300
+                    className={`fixed md:relative z-30 md:z-auto h-full w-[min(22rem,100vw)] md:w-auto transition-transform duration-300
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
                 >
                     <Chatlist
@@ -191,7 +210,7 @@ export default function ChatPage() {
                 />
                 {showLeaveModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                        <div className="bg-[#0d1117] border border-[#1e2a35] rounded-lg p-6 w-80 shadow-2xl">
+                        <div className="w-full max-w-sm rounded-lg border border-[#1e2a35] bg-[#0d1117] p-5 shadow-2xl sm:p-6">
                             <h2 className="text-[14px] font-bold text-[#c9d8e8] font-mono mb-2">Leave DevChat?</h2>
                             <p className="text-[12px] text-[#4a6070] font-mono mb-6">
                                 You may miss incoming messages while you&apos;re away.
