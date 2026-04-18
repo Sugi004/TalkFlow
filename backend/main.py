@@ -55,6 +55,7 @@ app.add_middleware(
         "http://localhost:3000",
         "http://localhost:8000",
         "http://127.0.0.1:3000",
+        "https://98-83-41-208.sslip.io",
         os.getenv("FRONTEND_URL", ""),
     ],
     allow_credentials=True,

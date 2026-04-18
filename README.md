@@ -261,7 +261,7 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
-The API runs on `http://localhost:8000` by default.
+The API runs on `http://98.83.41.208.sslip.io` by default.
 
 ### Frontend
 
