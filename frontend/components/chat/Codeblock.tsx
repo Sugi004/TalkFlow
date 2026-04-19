@@ -33,14 +33,52 @@ const SHIKI_LANGS = new Set([
     "dockerfile", "docker", "graphql", "text",
 ]);
 
+const AUTO_DETECT_LANGS = [
+    "javascript",
+    "typescript",
+    "jsx",
+    "tsx",
+    "python",
+    "bash",
+    "shell",
+    "sql",
+    "json",
+    "html",
+    "css",
+    "yaml",
+    "markdown",
+    "java",
+    "go",
+    "rust",
+    "php",
+    "ruby",
+    "c",
+    "cpp",
+    "csharp",
+];
+
+const LANGUAGE_ALIASES: Record<string, string> = {
+    js: "javascript",
+    ts: "typescript",
+    py: "python",
+    sh: "bash",
+    rb: "ruby",
+    rs: "rust",
+    cs: "csharp",
+    docker: "dockerfile",
+    yml: "yaml",
+    md: "markdown",
+};
+
 function normalizeLang(lang: string): string {
     const l = lang.trim().toLowerCase();
-    if (SHIKI_LANGS.has(l)) return l;
+    const normalized = LANGUAGE_ALIASES[l] ?? l;
+    if (SHIKI_LANGS.has(normalized)) return normalized;
     return "text";
 }
 
-function sanitizeCodeInput(rawCode: string, rawLanguage: string) {
-    const normalizedLanguage = rawLanguage.trim().toLowerCase();
+function sanitizeCodeInput(rawCode: string, rawLanguage?: string | null) {
+    const normalizedLanguage = (rawLanguage ?? "").trim().toLowerCase();
     const fenced = rawCode.match(/^```([^\n`]*)\n?([\s\S]*?)```$/);
 
     if (!fenced) {
@@ -58,9 +96,10 @@ function sanitizeCodeInput(rawCode: string, rawLanguage: string) {
 }
 
 function inferLanguage(code: string, language: string): string {
-    if (language) return language;
-    const detected = hljs.highlightAuto(code);
-    return detected.language ?? "text";
+    const requested = normalizeLang(language);
+    if (requested !== "text") return requested;
+    const detected = hljs.highlightAuto(code, AUTO_DETECT_LANGS);
+    return normalizeLang(detected.language ?? "text");
 }
 
 
