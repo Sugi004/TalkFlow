@@ -32,11 +32,9 @@ ipykernel==7.1.0
 ipython==9.8.0
 ipython_pygments_lexers==1.1.1
 jedi==0.19.2
-jose==1.0.0
 jupyter_client==8.7.0
 jupyter_core==5.9.1
 matplotlib-inline==0.2.1
-Naked==0.1.32
 nest-asyncio==1.6.0
 oauthlib==3.3.1
 packaging==25.0
@@ -62,15 +60,11 @@ pyparsing==3.3.2
 PyQRCode==1.2.1
 pytest==9.0.3
 python-dateutil==2.9.0.post0
-python-dotenv==1.2.2
-PyYAML==6.0.3
 pyzmq==27.1.0
 requests==2.32.5
 requests-oauthlib==2.0.0
-shellescape==3.8.1
 six==1.17.0
 soupsieve==2.8.3
-SQLAlchemy==2.0.49
 stack-data==0.6.3
 starlette==1.0.0
 stem==1.8.2
