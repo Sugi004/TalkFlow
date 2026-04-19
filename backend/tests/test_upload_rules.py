@@ -1,6 +1,11 @@
 import unittest
 
-from backend.upload_rules import is_allowed_upload, normalize_content_type, sanitize_file_name
+from support import ensure_backend_test_env
+
+
+ensure_backend_test_env()
+
+from upload_rules import is_allowed_upload, normalize_content_type, sanitize_file_name
 
 
 class UploadRulesTests(unittest.TestCase):

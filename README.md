@@ -219,7 +219,7 @@ The user-level WebSocket lets the frontend keep unread indicators, membership up
 
 ## Local Development
 
-### Backend
+### Backend setup
 
 ```bash
 cd backend
@@ -229,9 +229,7 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
-The API runs on `https://98.83.41.208.sslip.io` by default.
-
-### Frontend
+### Frontend setup
 
 ```bash
 cd frontend
@@ -239,77 +237,71 @@ npm install
 npm run dev
 ```
 
-The frontend runs on `http://localhost:3000`.
+### Suggested local URLs
+
+- Frontend: `http://localhost:3000`
+- Backend docs: `http://localhost:8000/docs`
+- Backend OpenAPI: `http://localhost:8000/openapi.json`
 
 ## Environment Variables
 
 ### Backend
 
-Typical backend variables include:
-
-```bash
-SECRET_KEY=your-jwt-secret
-ALGORITHM=HS256
-DATABASE_URL=your-database-url
-REDIS_URL=your-redis-url
-AWS_ACCESS_KEY_ID=...
-AWS_SECRET_ACCESS_KEY=...
-AWS_REGION=...
-S3_BUCKET=...
-GOOGLE_API_KEY=...
-FRONTEND_URL=http://localhost:3000
-MESSAGE_ENCRYPTION_KEY=your-message-encryption-secret
-```
+| Variable                      | Required    | Purpose                                         |
+| ----------------------------- | ----------- | ----------------------------------------------- |
+| `DATABASE_URL`                | Yes         | SQLAlchemy async database connection string     |
+| `IS_PRODUCTION`               | No          | Enables production-oriented DB SSL handling     |
+| `SECRET_KEY`                  | Yes         | JWT signing secret and fallback encryption seed |
+| `ALGORITHM`                   | Yes         | JWT signing algorithm, typically `HS256`        |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | No          | JWT expiration window                           |
+| `MESSAGE_ENCRYPTION_KEY`      | Recommended | Dedicated key for message encryption at rest    |
+| `FRONTEND_URL`                | No          | Extra CORS origin for deployed frontend         |
+| `REDIS_HOST`                  | No          | Redis host                                      |
+| `REDIS_PORT`                  | No          | Redis port                                      |
+| `REDIS_PASSWORD`              | No          | Redis password                                  |
+| `AWS_ACCESS_KEY_ID`           | For uploads | S3 credentials                                  |
+| `AWS_SECRET_ACCESS_KEY`       | For uploads | S3 credentials                                  |
+| `AWS_REGION`                  | For uploads | S3 region                                       |
+| `S3_BUCKET`                   | For uploads | Upload bucket name                              |
+| `GOOGLE_API_KEY`              | For AI      | Gemini API access                               |
 
 ### Frontend
 
-Typical frontend variables include:
+| Variable              | Required | Purpose                     |
+| --------------------- | -------- | --------------------------- |
+| `NEXT_PUBLIC_API_URL` | No       | REST API base URL override  |
+| `NEXT_PUBLIC_WS_URL`  | No       | WebSocket base URL override |
+
+## Testing
+
+The backend test suite is written with `unittest` and focuses on route-level behavior plus helper modules.
 
 ```bash
-NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws
+cd backend
+python3 -m unittest discover -s tests -v
 ```
 
-## Upload Support
+Coverage areas currently include:
 
-The app supports:
+- auth route behavior
+- message route behavior
+- upload allowlist logic
+- message encryption helpers
+- group membership/profile flows
+- user search and update behavior
 
-- images
-- videos
-- documents and archives
-- programming and source files such as `ts`, `tsx`, `js`, `py`, `java`, `cpp`, `sql`, `html`, `css`, `json`, `md`, `Dockerfile`, and more
+## Known Limitations
 
-Images preview inside chat, videos render inline, and other attachments are downloadable directly from the conversation view.
+- No refresh-token flow yet
+- No end-to-end encryption yet
+- AI endpoints depend on backend plaintext access
+- Upload handling is presigned-only and assumes S3-compatible storage
+- The current environment still needs project dependencies installed before tests can run locally
 
-## Realtime Features
+## Suggested Next Improvements
 
-- per-conversation WebSocket connections
-- optimistic send flow
-- typing indicators
-- read receipts
-- online/offline presence
-- membership updates for group participants
-
-## Notable UX Decisions
-
-- terminal-inspired visual language across auth and chat
-- mobile sidebar behavior tailored for conversation-first use
-- responsive composer, modals, group management, and profile flows
-- syntax-highlighted code blocks
-- in-chat image preview instead of pushing users out to a new tab
-
-## Testing and Verification
-
-Examples of verification used in this project include:
-
-- frontend linting
-- frontend TypeScript checks
-- backend unit tests for upload rules and message encryption helpers
-- backend feature tests for group/profile flows
-
-## What Makes This a Strong Portfolio Project
-
-- It demonstrates full-stack ownership from UX to backend data flow.
-- It includes realtime systems, auth, uploads, AI integration, and responsive UI.
-- It shows pragmatic security decisions instead of hand-wavy claims.
-- It documents both the current production-ready scope and the future E2EE roadmap clearly.
+1. Add a pinned `backend/.env.example` and `frontend/.env.example`
+2. Add CI for backend tests and frontend lint/build
+3. Move AI prompt building and provider integration behind a dedicated service layer
+4. Add more API tests around uploads, AI failures, and unread count edge cases
+5. Add migration tooling instead of relying on `create_all` at startup

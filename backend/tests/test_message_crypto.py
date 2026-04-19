@@ -1,7 +1,12 @@
 import os
 import unittest
 
-from backend.message_crypto import decrypt_message_content, encrypt_message_content, is_encrypted_content
+from support import ensure_backend_test_env
+
+
+ensure_backend_test_env()
+
+from message_crypto import decrypt_message_content, encrypt_message_content, is_encrypted_content
 
 
 class MessageCryptoTests(unittest.TestCase):
