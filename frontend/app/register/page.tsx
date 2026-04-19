@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import api from "@/lib/axios";
+import { getErrorMessage, register } from "@/lib/auth";
 
 interface FormState {
     username: string;
@@ -101,26 +101,19 @@ export default function Register() {
         setLoading(true);
         setErrors({});
         try {
-            const { data } = await api.post("/auth/register", {
-                full_name: form.username.trim(),
-                email: form.email.trim(),
-                password: form.password,
-            });
+            const data = await register(
+                form.email.trim(),
+                form.password,
+                form.username.trim(),
+            );
             if (data.access_token) {
-                localStorage.setItem("access_token", data.access_token);
+                sessionStorage.setItem("token", data.access_token);
                 router.push("/login");
             } else {
                 router.push("/login?registered=1");
             }
         } catch (error: unknown) {
-            const detail =
-                typeof error === "object"
-                && error !== null
-                && "response" in error
-                && typeof (error as { response?: { data?: { detail?: string } } }).response?.data?.detail === "string"
-                    ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail
-                    : "Cannot reach server. Is the backend running?";
-            setErrors({ general: detail });
+            setErrors({ general: getErrorMessage(error, "Cannot reach server. Is the backend running?") });
         } finally {
             setLoading(false);
         }

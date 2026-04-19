@@ -1,3 +1,4 @@
+import base64
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import jwt, JWTError                           
@@ -10,6 +11,8 @@ import os
 import bcrypt
 from database import get_db
 import models
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 load_dotenv()
 
@@ -17,7 +20,74 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 
+PASSWORD_ENCRYPTION_PUBLIC_KEY = os.getenv("PASSWORD_ENCRYPTION_PUBLIC_KEY")
+PASSWORD_ENCRYPTION_PRIVATE_KEY = os.getenv("PASSWORD_ENCRYPTION_PRIVATE_KEY")
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
+_password_private_key = None
+_password_public_pem = None
+
+
+def validate_password_strength(password: str):
+    special_chars = set("!@#$%^&*()_+-=[]{};'")
+    if len(password) < 8:
+        raise ValueError("Password must be at least 8 characters long")
+    if not any(c.isdigit() for c in password):
+        raise ValueError("Password must contain at least one number")
+    if not any(c.isupper() for c in password):
+        raise ValueError("Password must contain at least one uppercase letter")
+    if not any(c.islower() for c in password):
+        raise ValueError("Password must contain at least one lowercase letter")
+    if not any(c in special_chars for c in password):
+        raise ValueError("Password must contain at least one special character")
+
+
+def _load_password_encryption_keys():
+    global _password_private_key, _password_public_pem
+    if _password_private_key is not None and _password_public_pem is not None:
+        return _password_private_key, _password_public_pem
+
+    if PASSWORD_ENCRYPTION_PRIVATE_KEY:
+        private_key = serialization.load_pem_private_key(
+            PASSWORD_ENCRYPTION_PRIVATE_KEY.encode("utf-8"),
+            password=None,
+        )
+        if PASSWORD_ENCRYPTION_PUBLIC_KEY:
+            public_pem = PASSWORD_ENCRYPTION_PUBLIC_KEY.encode("utf-8")
+        else:
+            public_pem = private_key.public_key().public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+    else:
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        public_pem = private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+
+    _password_private_key = private_key
+    _password_public_pem = public_pem
+    return _password_private_key, _password_public_pem
+
+
+def get_password_public_key_pem() -> str:
+    _, public_pem = _load_password_encryption_keys()
+    return public_pem.decode("utf-8")
+
+
+def decrypt_password_payload(ciphertext_b64: str) -> str:
+    private_key, _ = _load_password_encryption_keys()
+    raw = base64.b64decode(ciphertext_b64.encode("ascii"))
+    plaintext = private_key.decrypt(
+        raw,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None,
+        ),
+    )
+    return plaintext.decode("utf-8")
 
 def hash_password(password: str):
     return bcrypt.hashpw(password.encode()[:72], bcrypt.gensalt()).decode("utf-8")

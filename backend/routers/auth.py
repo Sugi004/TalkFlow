@@ -6,7 +6,14 @@ from dotenv import load_dotenv
 import os
 from models import User
 from schemas import Token, UserCreate, UserLogin  
-from auth import create_access_token, verify_password, hash_password
+from auth import (
+    create_access_token,
+    decrypt_password_payload,
+    get_password_public_key_pem,
+    hash_password,
+    validate_password_strength,
+    verify_password,
+)
 from limiter import limiter
 from fastapi.security import OAuth2PasswordRequestForm
 
@@ -19,6 +26,27 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+
+def resolve_password(password: str, password_encrypted: bool) -> str:
+    if not password_encrypted:
+        return password
+
+    try:
+        return decrypt_password_payload(password)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid encrypted password payload",
+        ) from exc
+
+
+@router.get("/public-key")
+async def auth_public_key():
+    return {
+        "public_key": get_password_public_key_pem(),
+        "algorithm": "RSA-OAEP-256",
+    }
+
 @router.post("/register", response_model=Token)
 @limiter.limit("5/minute")
 async def register(request: Request,user_data: UserCreate, db: AsyncSession = Depends(get_db)):
@@ -29,7 +57,16 @@ async def register(request: Request,user_data: UserCreate, db: AsyncSession = De
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
         )
-    hashed_password = hash_password(user_data.password)
+    password = resolve_password(user_data.password, user_data.password_encrypted)
+    try:
+        validate_password_strength(password)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+    hashed_password = hash_password(password)
     new_user = User(
         email=user_data.email,
         hashed_password=hashed_password,
@@ -49,7 +86,8 @@ async def register(request: Request,user_data: UserCreate, db: AsyncSession = De
 async def login(request: Request, user_data: UserLogin, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == user_data.email))
     user = result.scalar_one_or_none()
-    if not user or not verify_password(user_data.password, user.hashed_password):
+    password = resolve_password(user_data.password, user_data.password_encrypted)
+    if not user or not verify_password(password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",

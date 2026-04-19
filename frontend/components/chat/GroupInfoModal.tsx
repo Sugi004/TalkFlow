@@ -41,6 +41,7 @@ export default function GroupInfoModal({
     const [query, setQuery] = useState("")
     const [results, setResults] = useState<User[]>([])
     const [removingUserId, setRemovingUserId] = useState<number | null>(null)
+    const [brokenMemberAvatarIds, setBrokenMemberAvatarIds] = useState<number[]>([])
 
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
@@ -357,12 +358,24 @@ export default function GroupInfoModal({
                                     {members.map((member) => {
                                         const canRemove = isAdmin && member.id !== currentUser?.id
                                         const isCurrentUser = member.id === currentUser?.id
+                                        const memberAvatarUrl = !brokenMemberAvatarIds.includes(member.id)
+                                            ? validAvatar(member.avatar_url)
+                                            : null
                                         return (
                                             <div key={member.id} className="flex items-start gap-3 rounded-lg border border-[#1e2a35] bg-[#0d1117] px-3 py-2.5 sm:items-center">
-                                                {member.avatar_url ? (
-                                                    <img src={member.avatar_url} alt={member.full_name ?? member.email} className="h-9 w-9 rounded-full object-cover" />
+                                                {memberAvatarUrl ? (
+                                                    <img
+                                                        src={memberAvatarUrl}
+                                                        alt={member.full_name ?? member.email}
+                                                        className="h-9 w-9 shrink-0 rounded-full object-cover"
+                                                        onError={() => {
+                                                            setBrokenMemberAvatarIds((prev) =>
+                                                                prev.includes(member.id) ? prev : [...prev, member.id]
+                                                            )
+                                                        }}
+                                                    />
                                                 ) : (
-                                                    <div className={`flex h-9 w-9 items-center justify-center rounded-full text-[11px] font-bold ${getAvatarColor(member.full_name ?? member.email)}`}>
+                                                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${getAvatarColor(member.full_name ?? member.email)}`}>
                                                         {getInitials(member.full_name ?? member.email)}
                                                     </div>
                                                 )}
