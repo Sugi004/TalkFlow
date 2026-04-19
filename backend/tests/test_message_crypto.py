@@ -6,7 +6,13 @@ from support import ensure_backend_test_env
 
 ensure_backend_test_env()
 
-from message_crypto import decrypt_message_content, encrypt_message_content, is_encrypted_content
+from message_crypto import (
+    UNREADABLE_MESSAGE_PLACEHOLDER,
+    decrypt_message_content,
+    decrypt_message_content_safe,
+    encrypt_message_content,
+    is_encrypted_content,
+)
 
 
 class MessageCryptoTests(unittest.TestCase):
@@ -32,6 +38,15 @@ class MessageCryptoTests(unittest.TestCase):
         self.assertEqual(decrypt_message_content("legacy plaintext"), "legacy plaintext")
         self.assertEqual(encrypt_message_content(""), "")
         self.assertIsNone(encrypt_message_content(None))
+
+    def test_safe_decrypt_returns_placeholder_when_key_changes(self):
+        encrypted = encrypt_message_content("hello from TalkFlow")
+        os.environ["MESSAGE_ENCRYPTION_KEY"] = "different-message-key"
+
+        self.assertEqual(
+            decrypt_message_content_safe(encrypted),
+            UNREADABLE_MESSAGE_PLACEHOLDER,
+        )
 
 
 if __name__ == "__main__":

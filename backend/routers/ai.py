@@ -12,7 +12,7 @@ from sqlalchemy.future import select
 
 from backend_auth import get_current_user
 from database import get_db
-from message_crypto import decrypt_message_content
+from message_crypto import decrypt_message_content_safe
 from models import Conversation, Message, Participants, User
 from schemas import (
     SmartReplyRequest,
@@ -211,7 +211,7 @@ async def summarize_conversation(
     )
     messages = list(reversed(messages_result.scalars().all()))
     decrypted_messages = [
-        (message.sender_id, decrypt_message_content(message.content))
+        (message.sender_id, decrypt_message_content_safe(message.content))
         for message in messages
     ]
 
@@ -255,7 +255,7 @@ async def suggest_replies(
     )
 
     last_message = last_message_result.scalars().first()
-    last_message_content = decrypt_message_content(last_message.content) if last_message else None
+    last_message_content = decrypt_message_content_safe(last_message.content) if last_message else None
     if not last_message or not last_message_content:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

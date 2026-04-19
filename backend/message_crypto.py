@@ -2,10 +2,12 @@ import base64
 import hashlib
 import os
 
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
 ENCRYPTION_PREFIX = "enc:v1:"
+UNREADABLE_MESSAGE_PLACEHOLDER = "[Unable to decrypt message]"
 
 
 def _get_message_encryption_key() -> bytes:
@@ -39,3 +41,13 @@ def decrypt_message_content(value: str | None) -> str | None:
     nonce, ciphertext = raw[:12], raw[12:]
     cipher = AESGCM(_get_message_encryption_key())
     return cipher.decrypt(nonce, ciphertext, None).decode("utf-8")
+
+
+def decrypt_message_content_safe(
+    value: str | None,
+    fallback: str | None = UNREADABLE_MESSAGE_PLACEHOLDER,
+) -> str | None:
+    try:
+        return decrypt_message_content(value)
+    except (InvalidTag, ValueError, TypeError):
+        return fallback
