@@ -81,8 +81,25 @@ function StatusIcon({ status }: { status?: string }) {
 
 // Image /video / file preview
 
-function MediaContent({ msg }: { msg: Message }) {
-    const kind = attachmentKind(msg);
+function AttachmentLink({ fileUrl, fileName }: { fileUrl: string; fileName: string }) {
+    return (
+        <a
+            href={fileUrl}
+            target="_blank"
+            rel="noreferrer"
+            download={fileName}
+            className="inline-flex items-center gap-2 mt-1 bg-[#0d1117] border border-[#1e2a35] rounded px-3 py-2
+          text-[12px] text-cyan-400 font-mono hover:border-cyan-400/30 transition-colors"
+        >
+            <span className="text-base">📎</span>
+            <span className="truncate max-w-[220px]">{fileName}</span>
+            <span className="text-[#4a6070] text-[10px] ml-1">↓</span>
+        </a>
+    );
+}
+
+function MediaContent({ msg, forceFile = false }: { msg: Message; forceFile?: boolean }) {
+    const kind = forceFile ? "file" : attachmentKind(msg);
     const fileName = attachmentName(msg);
 
     if (kind === "video" && msg.file_url) return (
@@ -97,20 +114,7 @@ function MediaContent({ msg }: { msg: Message }) {
         </div>
     )
     if (kind === "file" && msg.file_url) {
-        return (
-            <a
-                href={msg.file_url}
-                target="_blank"
-                rel="noreferrer"
-                download={fileName}
-                className="inline-flex items-center gap-2 mt-1 bg-[#0d1117] border border-[#1e2a35] rounded px-3 py-2
-          text-[12px] text-cyan-400 font-mono hover:border-cyan-400/30 transition-colors"
-            >
-                <span className="text-base">📎</span>
-                <span className="truncate max-w-[220px]">{fileName}</span>
-                <span className="text-[#4a6070] text-[10px] ml-1">↓</span>
-            </a>
-        );
+        return <AttachmentLink fileUrl={msg.file_url} fileName={fileName} />;
     }
     return null
 
@@ -120,11 +124,15 @@ function MediaContent({ msg }: { msg: Message }) {
 // Main componenet
 export default function MessageBubble({ message, isOwn, grouped, onDelete, onTranslate, translatedContent }: MessageBubbleProps) {
     const [hover, setHover] = useState(false);
-    const [previewOpen, setPreviewOpen] = useState(false);
+    const [previewMediaKey, setPreviewMediaKey] = useState<string | null>(null);
+    const [failedMediaKey, setFailedMediaKey] = useState<string | null>(null);
     const isCodeMessage = message.message_type === "code"
     const mediaKind = attachmentKind(message);
     const fileName = attachmentName(message);
     const shouldRenderTextBubble = Boolean(message.content) && !mediaKind;
+    const mediaKey = `${message.id}:${message.file_url ?? ""}`;
+    const previewOpen = previewMediaKey === mediaKey;
+    const imageFailed = failedMediaKey === mediaKey;
 
     if (message.is_deleted) {
         return (
@@ -181,21 +189,23 @@ export default function MessageBubble({ message, isOwn, grouped, onDelete, onTra
                                     )}
                                 </div>
                             )}
-                            {mediaKind === "image" && message.file_url ? (
+                            {mediaKind === "image" && message.file_url && !imageFailed ? (
                                 <button
                                     type="button"
-                                    onClick={() => setPreviewOpen(true)}
-                                    className="mt-2 block overflow-hidden rounded-lg text-left"
+                                    onClick={() => setPreviewMediaKey(mediaKey)}
+                                    className="mt-2 block w-full max-w-[min(78vw,19rem)] overflow-hidden rounded-lg border border-[#1e2a35] bg-[#060a0e] text-left sm:max-w-[320px]"
                                     title="View image"
                                 >
                                     <img
                                         src={message.file_url}
                                         alt={fileName}
-                                        className="max-h-[220px] max-w-[78vw] rounded border border-[#1e2a35] object-cover transition-opacity hover:opacity-90 sm:max-w-[320px]"
+                                        loading="lazy"
+                                        onError={() => setFailedMediaKey(mediaKey)}
+                                        className="max-h-[240px] w-full rounded object-contain transition-opacity hover:opacity-90"
                                     />
                                 </button>
                             ) : (
-                                <MediaContent msg={message} />
+                                <MediaContent msg={message} forceFile={mediaKind === "image" && imageFailed} />
                             )}
                         </>
                     )}
@@ -232,8 +242,8 @@ export default function MessageBubble({ message, isOwn, grouped, onDelete, onTra
             </div>
             {previewOpen && mediaKind === "image" && message.file_url && (
                 <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 px-4 py-6 backdrop-blur-sm"
-                    onClick={() => setPreviewOpen(false)}
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 px-3 py-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1rem)] backdrop-blur-sm sm:px-4 sm:py-6"
+                    onClick={() => setPreviewMediaKey(null)}
                 >
                     <div
                         className="w-full max-w-5xl rounded-2xl border border-[#1e2a35] bg-[#0d1117] p-3 shadow-2xl sm:p-4"
@@ -243,7 +253,7 @@ export default function MessageBubble({ message, isOwn, grouped, onDelete, onTra
                             <p className="truncate text-[11px] text-[#4a6070] font-mono">{fileName}</p>
                             <button
                                 type="button"
-                                onClick={() => setPreviewOpen(false)}
+                                onClick={() => setPreviewMediaKey(null)}
                                 className="shrink-0 rounded border border-[#1e2a35] px-2.5 py-1 text-[11px] text-[#c9d8e8] font-mono transition-colors hover:bg-[#1a2530]"
                             >
                                 Close
@@ -253,7 +263,11 @@ export default function MessageBubble({ message, isOwn, grouped, onDelete, onTra
                             <img
                                 src={message.file_url}
                                 alt={fileName}
-                                className="max-h-[78vh] w-auto max-w-full rounded-xl object-contain"
+                                onError={() => {
+                                    setFailedMediaKey(mediaKey);
+                                    setPreviewMediaKey(null);
+                                }}
+                                className="max-h-[72vh] w-auto max-w-full rounded-xl object-contain sm:max-h-[78vh]"
                             />
                         </div>
                     </div>

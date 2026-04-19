@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Conversation, MembershipEvent, Message } from "@/types"
 import { useAuth } from "@/context/AuthContext"
@@ -11,6 +11,7 @@ import Chatwindow from "@/components/chat/Chatwindow"
 import { useGlobalSocket } from "@/hooks/useGlobalSocket"
 
 export default function ChatPage() {
+    const MOBILE_CHAT_HISTORY_KEY = "talkflow-mobile-chat-open";
     const router = useRouter();
     const { isAuthenticated, logout, token, currentUser } = useAuth();
     const [activeConvId, setActiveConvId] = useState<number | null>(null);
@@ -19,6 +20,8 @@ export default function ChatPage() {
     const [showLeaveModal, setShowLeaveModal] = useState(false);
     const [lastReadConvId, setLastReadConvId] = useState<number | null>(null);
     const [externalMessage, setExternalMessage] = useState<Message | null>(null);
+    const activeConvIdRef = useRef<number | null>(null);
+    const mobileChatHistoryOpenRef = useRef(false);
 
     const {
         conversations,
@@ -44,10 +47,20 @@ export default function ChatPage() {
     }, [isAuthenticated, router]);
 
     useEffect(() => {
+        activeConvIdRef.current = activeConvId;
+        if (activeConvId === null) {
+            mobileChatHistoryOpenRef.current = false;
+        }
+    }, [activeConvId]);
+
+    useEffect(() => {
         const syncViewport = () => {
             const mobile = window.innerWidth < 768;
             setIsMobile(mobile);
             setSidebarOpen((prev) => (mobile ? (activeConvId === null ? true : prev) : true));
+            if (!mobile) {
+                mobileChatHistoryOpenRef.current = false;
+            }
         };
 
         syncViewport();
@@ -58,6 +71,13 @@ export default function ChatPage() {
     // Protect accidental closure
     useEffect(() => {
         const handlePopState = (e: PopStateEvent) => {
+            if (window.innerWidth < 768 && activeConvIdRef.current !== null) {
+                mobileChatHistoryOpenRef.current = false;
+                setActiveConvId(null);
+                setExternalMessage(null);
+                setSidebarOpen(true);
+                return;
+            }
             e.preventDefault();
             window.history.pushState(null, "", window.location.href);
             setShowLeaveModal(true);
@@ -115,11 +135,16 @@ export default function ChatPage() {
     // Select conversation
 
     function selectConversation(conversation: Conversation) {
+        const mobile = window.innerWidth < 768;
+        if (mobile && !mobileChatHistoryOpenRef.current) {
+            window.history.pushState({ [MOBILE_CHAT_HISTORY_KEY]: true }, "", window.location.href);
+            mobileChatHistoryOpenRef.current = true;
+        }
         setActiveConvId(conversation.id);
         clearUnread(conversation.id);
         markAsRead(conversation.id).catch(() => { });
         // on mobile, close sidebar when selecting
-        if (window.innerWidth <= 768) {
+        if (mobile) {
             setSidebarOpen(false);
         }
     }
@@ -150,6 +175,17 @@ export default function ChatPage() {
         refresh()
 
     }
+
+    function handleBackToChats() {
+        if (isMobile && activeConvId !== null && mobileChatHistoryOpenRef.current) {
+            window.history.back();
+            return;
+        }
+        mobileChatHistoryOpenRef.current = false;
+        setActiveConvId(null);
+        setExternalMessage(null);
+        setSidebarOpen(true);
+    }
     // Sign out
     function handleSignout() {
         logout();
@@ -161,12 +197,15 @@ export default function ChatPage() {
             <div className="flex h-dvh min-h-[100dvh] bg-[#080c10] overflow-hidden">
 
                 {/* Sidebar toggle for mobile */}
-                <button
-                    onClick={() => setSidebarOpen((v) => !v)}
-                    className="fixed top-3 left-3 z-30 md:hidden w-8 h-8 flex items-center justify-center rounded bg-[#0d1117] border border-[#1e2a35] text-[#4a6070] hover:text-cyan-400 transition-colors"
-                >
-                    ☰
-                </button>
+                {!sidebarOpen && !activeConv && (
+                    <button
+                        onClick={() => setSidebarOpen(true)}
+                        className="fixed left-3 top-3 z-30 flex h-8 w-8 items-center justify-center rounded border border-[#1e2a35] bg-[#0d1117] text-[#4a6070] transition-colors hover:text-cyan-400 md:hidden"
+                        aria-label="Open chats"
+                    >
+                        ☰
+                    </button>
+                )}
 
                 {/* Sidebar overlay (mobile) */}
                 {sidebarOpen && (
@@ -200,9 +239,11 @@ export default function ChatPage() {
                     conversation={activeConv}
                     currentUser={currentUser}
                     token={token}
+                    isMobile={isMobile}
                     onIncomingMessage={(msg: Message) => handleIncomingMessage(msg, activeConv?.id ?? null)}
                     onPresence={updatePresence}
                     onDelete={handleDeleteConversation}
+                    onBackToChats={handleBackToChats}
                     onLeaveConversation={handleLeaveConversation}
                     onRefreshConversations={refresh}
                     onExternalRead={lastReadConvId}

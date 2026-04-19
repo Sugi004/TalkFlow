@@ -250,10 +250,12 @@ export default function ChatWindow({
     conversation,
     currentUser,
     token,
+    isMobile = false,
     onIncomingMessage,
     onPresence,
     onLeaveConversation,
     onRefreshConversations,
+    onBackToChats,
     onExternalRead,
     externalMessage,
 }: ChatWindowProps) {
@@ -621,11 +623,24 @@ export default function ChatWindow({
         <>
             <div className="flex-1 flex flex-col min-w-0 bg-[#080c10]">
                 {/* Header */}
-                <header className="flex shrink-0 flex-wrap items-start gap-3 border-b border-[#1e2a35] bg-[#0d1117] px-3 py-3 sm:px-5">
-                    <ConvAvatar conv={conversation} />
+                <header className="flex shrink-0 items-center gap-2 border-b border-[#1e2a35] bg-[#0d1117] px-3 py-3 sm:gap-3 sm:px-5">
+                    {isMobile && onBackToChats && (
+                        <button
+                            type="button"
+                            onClick={onBackToChats}
+                            className="flex h-6 w-6 shrink-0 items-center justify-center text-base text-[#c9d8e8] transition-colors hover:text-cyan-400 md:hidden"
+                            aria-label="Back to chats"
+                            title="Back to chats"
+                        >
+                            ‹
+                        </button>
+                    )}
 
-                    <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <ConvAvatar conv={conversation} />
+
+                        <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
                             <h1 className="text-[14px] font-bold text-[#c9d8e8] font-mono truncate">
                                 {convDisplayName(conversation)}
                             </h1>
@@ -641,35 +656,40 @@ export default function ChatWindow({
                                     {conversation.participants?.length ?? 0} members
                                 </button>
                             )}
+                            </div>
+                            {!conversation.is_group && conversation.other_user && (
+                                <p className="text-[11px] font-mono text-[#4a6070] break-words">
+                                    {conversation.other_user.is_online
+                                        ? "online"
+                                        : conversation.other_user.last_seen
+                                            ? `last seen ${new Date(conversation.other_user.last_seen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "2-digit", hour12: true })}`
+                                            : "offline"}
+                                </p>
+                            )}
                         </div>
-                        {!conversation.is_group && conversation.other_user && (
-                            <p className="text-[11px] font-mono text-[#4a6070] break-words">
-                                {conversation.other_user.is_online
-                                    ? "online"
-                                    : conversation.other_user.last_seen
-                                        ? `last seen ${new Date(conversation.other_user.last_seen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "2-digit", hour12: true })}`
-                                        : "offline"}
-                            </p>
-                        )}
                     </div>
 
-                    <div className="ml-auto flex items-center gap-1.5 self-start sm:gap-2">
+                    <div className="ml-auto flex shrink-0 items-center gap-1 self-start sm:gap-2">
                         <button
                             onClick={() => setShowAiPanel((v) => !v)}
-                            className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-mono font-semibold transition-all sm:gap-1.5 sm:px-2.5
-            ${showAiPanel ? "bg-violet-500/20 text-violet-400 border border-violet-500/30" : "text-[#4a6070] hover:text-violet-400 hover:bg-violet-500/10 border border-transparent"}`}
+                            className={`flex h-8 items-center justify-center gap-1 rounded px-2 py-1 text-[11px] font-mono font-semibold transition-all sm:h-auto sm:gap-1.5 sm:px-2.5
+	            ${showAiPanel ? "bg-violet-500/20 text-violet-400 border border-violet-500/30" : "text-[#4a6070] hover:text-violet-400 hover:bg-violet-500/10 border border-transparent"}`}
                             title="Gemini AI features"
+                            aria-label="AI tools"
                         >
-                            <span>✦</span> AI
+                            <span>✦</span>
+                            <span className="hidden sm:inline">AI</span>
                         </button>
                         {conversation.is_group && (
                             <button
                                 type="button"
                                 onClick={() => setShowGroupInfo(true)}
-                                className="flex items-center gap-1 rounded border border-transparent px-2 py-1 text-[11px] font-mono font-semibold text-[#4a6070] transition-all hover:border-cyan-400/20 hover:bg-cyan-400/10 hover:text-cyan-400 sm:gap-1.5 sm:px-2.5"
+                                className="flex h-8 items-center justify-center gap-1 rounded border border-transparent px-2 py-1 text-[11px] font-mono font-semibold text-[#4a6070] transition-all hover:border-cyan-400/20 hover:bg-cyan-400/10 hover:text-cyan-400 sm:h-auto sm:gap-1.5 sm:px-2.5"
                                 title="Open group info"
+                                aria-label="Open group info"
                             >
-                                <span>☰</span> Group
+                                <span>☰</span>
+                                <span className="hidden sm:inline">Group</span>
                             </button>
                         )}
                     </div>

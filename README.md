@@ -1,6 +1,6 @@
 # TalkFlow
 
- TalkFlow is a full-stack real-time chat application built as a portfolio-ready project with direct messaging, group conversations, AI-assisted chat tools, profile management, media/file sharing, and a responsive chat experience across desktop and mobile.
+TalkFlow is a full-stack real-time chat application built as a portfolio-ready project with direct messaging, group conversations, AI-assisted chat tools, profile management, media/file sharing, and a responsive chat experience across desktop and mobile.
 
 ![TalkFlow chat screenshot](docs/images/chat-flow.png)
 

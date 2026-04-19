@@ -185,9 +185,11 @@ export interface ChatWindowProps{
     conversation: Conversation | null;
     currentUser: User | null;
     token: string | null;
+    isMobile?: boolean;
     onPresence:(userId: number, fullName: string, isOnline: boolean, lastSeen: string) => void;
     onIncomingMessage:(message: Message) => void;
     onDelete: (conversationId: number) => void;
+    onBackToChats?: () => void;
     onLeaveConversation?: (conversationId: number) => Promise<void>;
     onRefreshConversations?: () => Promise<void>;
     onExternalRead?: number | null;
