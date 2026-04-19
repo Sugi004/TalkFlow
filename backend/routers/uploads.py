@@ -4,7 +4,6 @@ from models import User
 import boto3
 import uuid
 import os
-from botocore.config import Config
 from dotenv import load_dotenv
 from schemas import PresignedUrlRequest, PresignedUrlResponse
 from upload_rules import is_allowed_upload, normalize_content_type, sanitize_file_name
@@ -16,25 +15,13 @@ s3_client = boto3.client(
     "s3",
     aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
     aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-    region_name=os.getenv("AWS_REGION"),
-    config=Config(
-        signature_version="s3v4",
-        s3={"addressing_style": "virtual"},
-    ),
+    region_name=os.getenv("AWS_REGION")
 )
 
 S3_BUCKET = os.getenv("S3_BUCKET")
 AWS_REGION = os.getenv("AWS_REGION")
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
-
-
-def build_public_file_url(file_key: str) -> str:
-    if not S3_BUCKET:
-        raise RuntimeError("Missing S3_BUCKET")
-    if not AWS_REGION:
-        raise RuntimeError("Missing AWS_REGION")
-    return f"https://{S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{file_key}"
 
 #  Get presigned upload URL
 @router.post("/presigned-url", response_model=PresignedUrlResponse)
@@ -69,7 +56,7 @@ async def get_presigned_url(data: PresignedUrlRequest, current_user: User = Depe
             ExpiresIn=300
         )
         #  Public URL of the file after upload
-        file_url = build_public_file_url(file_key)
+        file_url = f"https://{S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{file_key}"
         
         return PresignedUrlResponse(
             upload_url=upload_url,
