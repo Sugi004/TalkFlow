@@ -57,7 +57,6 @@ app.add_middleware(
         "http://localhost:3000",
         "http://localhost:8000",
         "http://127.0.0.1:3000",
-        
         "https://98-83-41-208.sslip.io",
         "https://www.talkflow.digital",
         "https://talkflow.digital",
