@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import hljs from "highlight.js"
 import { codeToHtml } from "shiki"
 import { CodeBlockProps } from "@/types"
 
@@ -38,19 +39,46 @@ function normalizeLang(lang: string): string {
     return "text";
 }
 
+function sanitizeCodeInput(rawCode: string, rawLanguage: string) {
+    const normalizedLanguage = rawLanguage.trim().toLowerCase();
+    const fenced = rawCode.match(/^```([^\n`]*)\n?([\s\S]*?)```$/);
+
+    if (!fenced) {
+        return {
+            code: rawCode,
+            language: normalizedLanguage,
+        };
+    }
+
+    const inlineLanguage = fenced[1].trim().toLowerCase();
+    return {
+        code: fenced[2].replace(/\n$/, ""),
+        language: normalizedLanguage || inlineLanguage,
+    };
+}
+
+function inferLanguage(code: string, language: string): string {
+    if (language) return language;
+    const detected = hljs.highlightAuto(code);
+    return detected.language ?? "text";
+}
+
 
 export default function CodeBlock({ code, language = "" }: CodeBlockProps) {
     const [highlighted, setHighlighted] = useState<string>("");
     const [copied, setCopied] = useState(false)
-    const lang = language.toLocaleLowerCase().trim();
+    const { code: cleanCode, language: cleanedLanguage } = sanitizeCodeInput(code, language);
+    const inferredLanguage = inferLanguage(cleanCode, cleanedLanguage);
+    const lang = inferredLanguage.toLocaleLowerCase().trim();
     const label = lang ? (LANG_LABELS[lang] ?? lang.charAt(0).toUpperCase() + lang.slice(1)) : "Code";
     const shikiLang = normalizeLang(lang);
     const loading = !highlighted;
 
     useEffect(() => {
         let cancelled = false;
+        setHighlighted("");
 
-        codeToHtml(code, {
+        codeToHtml(cleanCode, {
             lang: shikiLang,
             theme: "one-dark-pro"
         }).then((html) => {
@@ -62,10 +90,10 @@ export default function CodeBlock({ code, language = "" }: CodeBlockProps) {
         return () => {
             cancelled = true;
         }
-    }, [code, shikiLang])
+    }, [cleanCode, shikiLang])
 
     async function copy() {
-        await navigator.clipboard.writeText(code);
+        await navigator.clipboard.writeText(cleanCode);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
     }
@@ -102,7 +130,7 @@ export default function CodeBlock({ code, language = "" }: CodeBlockProps) {
                 <div className="overflow-x-auto overscroll-x-contain bg-[#060a0e]">
                     {loading ? (
                         <pre className="m-0 min-w-full whitespace-pre px-3 py-3 text-[11.5px] leading-[1.7] font-mono text-[#4a6070] sm:px-4 sm:py-3.5 sm:text-[12.5px]">
-                            {code}
+                            {cleanCode}
                         </pre>
                     ) : (
                         <div

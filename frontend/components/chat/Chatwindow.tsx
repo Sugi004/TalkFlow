@@ -70,6 +70,37 @@ function mergeUniqueMessages(existing: Message[], incoming: Message[]) {
     return merged.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
 }
 
+function parseCodeMessage(content: string) {
+    if (!content.startsWith("```")) {
+        return {
+            isCode: false,
+            language: undefined,
+            body: content,
+        };
+    }
+
+    const rest = content.slice(3);
+    const firstLineBreak = rest.indexOf("\n");
+    if (firstLineBreak === -1) {
+        return {
+            isCode: true,
+            language: undefined,
+            body: rest.replace(/```$/, "").trim(),
+        };
+    }
+
+    const firstLine = rest.slice(0, firstLineBreak).trim();
+    const remainder = rest.slice(firstLineBreak + 1);
+    const body = remainder.replace(/\n?```$/, "").trim();
+    const explicitLanguage = /^[A-Za-z0-9_+-]+$/.test(firstLine) ? firstLine : undefined;
+
+    return {
+        isCode: true,
+        language: explicitLanguage,
+        body: explicitLanguage ? body : `${firstLine}\n${body}`.trim(),
+    };
+}
+
 // typing indicator
 
 function TypingIndicator({ users }: { users: string[] }) {
@@ -491,9 +522,10 @@ export default function ChatWindow({
         if (textareaRef.current) textareaRef.current.style.height = "auto";
 
         const tempId = crypto.randomUUID()
-        const isCode = content.startsWith("```")
-        const lang = isCode ? content.split("\n")[0].replace("```", "").trim() : undefined;
-        const codeContent = isCode ? content.replace(/^```\w*\n/, "").replace(/```$/, "").trim() : content;
+        const parsed = parseCodeMessage(content)
+        const isCode = parsed.isCode
+        const lang = parsed.language
+        const codeContent = parsed.body
         const optimistic: Message = {
             id: Date.now() as unknown as number,
             conversation_id: convId,
