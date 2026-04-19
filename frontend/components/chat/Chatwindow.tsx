@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, KeyboardEvent, ChangeEvent } from "react"
 import toast from "react-hot-toast"
-import { Message, ChatWindowProps } from "@/types"
+import { Message, MessageTranslation, ChatWindowProps } from "@/types"
 import { getMessages, deleteMessage, markAsRead } from "@/lib/messages"
 import { uploadFile, messageTypeFromFile } from "@/lib/uploads"
 import { getSmartReply, summarizeConversation, translateMessage } from "@/lib/ai"
@@ -269,7 +269,8 @@ export default function ChatWindow({
     const [showAiPanel, setShowAiPanel] = useState(false)
     const [showGroupInfo, setShowGroupInfo] = useState(false)
     const [typingUsers, setTypingUsers] = useState<{ id: number; name: string }[]>([])
-    const [translatedMap, setTranslatedMap] = useState<Record<number, string>>({})
+    const [translatedMap, setTranslatedMap] = useState<Record<number, MessageTranslation>>({})
+    const [translatingMap, setTranslatingMap] = useState<Record<number, boolean>>({})
     const messagesContainerRef = useRef<HTMLDivElement>(null)
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const messagesTopRef = useRef<HTMLDivElement>(null)
@@ -331,6 +332,7 @@ export default function ChatWindow({
         setShowAiPanel(false)
         setShowGroupInfo(false)
         setTranslatedMap({})
+        setTranslatingMap({})
         loadingMoreRef.current = false
         initialScrollDoneRef.current = false
     }, [convId, token])
@@ -569,15 +571,29 @@ export default function ChatWindow({
         catch { }
     }
 
-    async function handleTranslate(msgId: number) {
+    async function handleTranslate(msgId: number, targetLanguage: string) {
         const msg = messages.find((m) => m.id === msgId)
         if (!msg?.content) return
 
+        const language = targetLanguage.trim()
+        if (!language) return
+
+        setTranslatingMap((prev) => ({ ...prev, [msgId]: true }))
         try {
-            const translated = await translateMessage(msg.content, "English")
-            setTranslatedMap((prev) => ({ ...prev, [msgId]: translated }))
+            const translated = await translateMessage(msg.content, language)
+            setTranslatedMap((prev) => ({
+                ...prev,
+                [msgId]: {
+                    text: translated,
+                    targetLanguage: language,
+                },
+            }))
         }
-        catch { }
+        catch {
+            toast.error("Translation failed")
+        } finally {
+            setTranslatingMap((prev) => ({ ...prev, [msgId]: false }))
+        }
     }
 
     // Load more (scroll to top)
@@ -743,6 +759,7 @@ export default function ChatWindow({
                                     onDelete={handleDelete}
                                     onTranslate={handleTranslate}
                                     translatedContent={translatedMap[m.id]}
+                                    isTranslating={Boolean(translatingMap[m.id])}
                                 />
                             );
                         })}

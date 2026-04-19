@@ -168,6 +168,11 @@ export interface TranslateResponse{
     translated: string;
 }
 
+export interface MessageTranslation {
+    text: string;
+    targetLanguage: string;
+}
+
 export interface ChatListProps{
     conversations: Conversation[];
     loading: boolean;
@@ -207,6 +212,7 @@ export interface MessageBubbleProps {
     isOwn: boolean;
     grouped?: boolean;
     onDelete?: (id: number) => void;
-    onTranslate?: (id: number) => void;
-    translatedContent?: string;
+    onTranslate?: (id: number, targetLanguage: string) => Promise<void> | void;
+    translatedContent?: MessageTranslation;
+    isTranslating?: boolean;
 }

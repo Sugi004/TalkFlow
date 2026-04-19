@@ -122,10 +122,12 @@ function MediaContent({ msg, forceFile = false }: { msg: Message; forceFile?: bo
 
 
 // Main componenet
-export default function MessageBubble({ message, isOwn, grouped, onDelete, onTranslate, translatedContent }: MessageBubbleProps) {
+export default function MessageBubble({ message, isOwn, grouped, onDelete, onTranslate, translatedContent, isTranslating = false }: MessageBubbleProps) {
     const [hover, setHover] = useState(false);
     const [previewMediaKey, setPreviewMediaKey] = useState<string | null>(null);
     const [failedMediaKey, setFailedMediaKey] = useState<string | null>(null);
+    const [showTranslateControls, setShowTranslateControls] = useState(false);
+    const [targetLanguage, setTargetLanguage] = useState(translatedContent?.targetLanguage ?? "English");
     const isCodeMessage = message.message_type === "code"
     const mediaKind = attachmentKind(message);
     const fileName = attachmentName(message);
@@ -133,6 +135,7 @@ export default function MessageBubble({ message, isOwn, grouped, onDelete, onTra
     const mediaKey = `${message.id}:${message.file_url ?? ""}`;
     const previewOpen = previewMediaKey === mediaKey;
     const imageFailed = failedMediaKey === mediaKey;
+    const canTranslate = Boolean(onTranslate && shouldRenderTextBubble && message.message_type === "text" && message.content?.trim());
 
     if (message.is_deleted) {
         return (
@@ -183,10 +186,60 @@ export default function MessageBubble({ message, isOwn, grouped, onDelete, onTra
                                         : "bg-[#0d1117] border border-[#1e2a35] text-[#c9d8e8] rounded-tl-sm"
                                     }`}>
 
-                                    {translatedContent ?? message.content}
-                                    {translatedContent && (
-                                        <span className="ml-2 text-[9px] text-amber-400 font-mono">[translated]</span>
-                                    )}
+                                    {message.content}
+                                </div>
+                            )}
+                            {translatedContent && (
+                                <div className={`mt-2 break-words rounded-2xl px-3 py-2 text-[12.5px] font-mono leading-relaxed whitespace-pre-wrap sm:px-3.5 sm:text-[13px]
+                        ${isOwn
+                                        ? "bg-amber-400/10 text-amber-100 border border-amber-400/20"
+                                        : "bg-[#131a22] border border-amber-400/15 text-[#dbe7f3]"
+                                    }`}>
+                                    <div className="mb-1 text-[9px] uppercase tracking-[0.18em] text-amber-400/80">
+                                        Translated to {translatedContent.targetLanguage}
+                                    </div>
+                                    {translatedContent.text}
+                                </div>
+                            )}
+                            {showTranslateControls && canTranslate && onTranslate && (
+                                <div className={`mt-2 w-full rounded-2xl border px-3 py-3 ${isOwn ? "border-cyan-400/20 bg-cyan-400/5" : "border-[#22303d] bg-[#111821]"}`}>
+                                    <label className="mb-1 block text-[10px] font-mono uppercase tracking-[0.18em] text-[#4a6070]">
+                                        Translate to
+                                    </label>
+                                    <div className="flex flex-col gap-2 sm:flex-row">
+                                        <input
+                                            value={targetLanguage}
+                                            onChange={(e) => setTargetLanguage(e.target.value)}
+                                            placeholder="English"
+                                            className="min-w-0 flex-1 rounded-lg border border-[#22303d] bg-[#080c10] px-3 py-2 text-[12px] text-[#c9d8e8] outline-none transition-colors focus:border-amber-400"
+                                        />
+                                        <div className="flex gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const nextLanguage = targetLanguage.trim();
+                                                    if (!nextLanguage) return;
+                                                    const maybePromise = onTranslate(message.id, nextLanguage);
+                                                    if (maybePromise && typeof maybePromise.then === "function") {
+                                                        maybePromise.finally(() => setShowTranslateControls(false));
+                                                    } else {
+                                                        setShowTranslateControls(false);
+                                                    }
+                                                }}
+                                                className="rounded-lg bg-amber-400/15 px-3 py-2 text-[11px] font-mono text-amber-300 transition-colors hover:bg-amber-400/25 disabled:cursor-not-allowed disabled:opacity-60"
+                                                disabled={isTranslating}
+                                            >
+                                                {isTranslating ? "Translating..." : "Translate"}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowTranslateControls(false)}
+                                                className="rounded-lg border border-[#22303d] px-3 py-2 text-[11px] font-mono text-[#4a6070] transition-colors hover:text-[#c9d8e8]"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                             {mediaKind === "image" && message.file_url && !imageFailed ? (
@@ -223,9 +276,12 @@ export default function MessageBubble({ message, isOwn, grouped, onDelete, onTra
                 {/* Context menu — flip side for own messages */}
                 {hover && (
                     <div className="flex items-start gap-0.5 pt-1 self-start">
-                        {onTranslate && (
+                        {canTranslate && (
                             <button
-                                onClick={() => onTranslate(message.id)}
+                                onClick={() => {
+                                    setTargetLanguage(translatedContent?.targetLanguage ?? targetLanguage ?? "English");
+                                    setShowTranslateControls((prev) => !prev);
+                                }}
                                 className="w-7 h-7 flex items-center justify-center rounded text-[#4a6070] hover:text-amber-400 hover:bg-[#1a2530] transition-colors text-xs"
                                 title="Translate"
                             >🌐</button>

@@ -44,6 +44,14 @@ if GEMINI_API_KEY and genai is not None:
     genai.configure(api_key=GEMINI_API_KEY)
 
 
+def resolve_sender_label(user: User | None, sender_id: int) -> str:
+    if user and user.full_name:
+        return user.full_name
+    if user and user.email:
+        return user.email
+    return f"User {sender_id}"
+
+
 def active_ai_provider() -> str:
     if AI_PROVIDER in {"groq", "gemini"}:
         return AI_PROVIDER
@@ -198,7 +206,8 @@ async def summarize_conversation(
     await load_participant_conversation(data.conversation_id, current_user, db)
 
     messages_result = await db.execute(
-        select(Message)
+        select(Message, User)
+        .join(User, User.id == Message.sender_id, isouter=True)
         .where(
             and_(
                 Message.conversation_id == data.conversation_id,
@@ -209,10 +218,13 @@ async def summarize_conversation(
         .order_by(Message.created_at.desc())
         .limit(data.last_n_messages)
     )
-    messages = list(reversed(messages_result.scalars().all()))
+    message_rows = list(reversed(messages_result.all()))
     decrypted_messages = [
-        (message.sender_id, decrypt_message_content_safe(message.content))
-        for message in messages
+        (
+            resolve_sender_label(sender, message.sender_id),
+            decrypt_message_content_safe(message.content),
+        )
+        for message, sender in message_rows
     ]
 
     if not decrypted_messages:
@@ -222,8 +234,8 @@ async def summarize_conversation(
         )
 
     conversation_text = "\n".join(
-        f"User {sender_id}: {content}"
-        for sender_id, content in decrypted_messages
+        f"{sender_label}: {content}"
+        for sender_label, content in decrypted_messages
         if content
     )
     summary = await generate_ai_text(
