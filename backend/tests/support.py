@@ -21,7 +21,7 @@ def ensure_backend_test_env() -> Path:
     os.environ.setdefault("REDIS_PORT", "6379")
     os.environ.setdefault("S3_BUCKET", "talkflow-test-bucket")
     os.environ.setdefault("AWS_REGION", "us-east-1")
-    os.environ.setdefault("GOOGLE_API_KEY", "talkflow-test-google-key")
+    os.environ.setdefault("GEMINI_API_KEY", "talkflow-test-gemini-key")
 
     return backend_dir
 

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import aliased
 
-from auth import get_current_user
+from backend_auth import get_current_user
 from database import get_db
 from message_crypto import decrypt_message_content
 from models import Conversation, Message, Participants, User

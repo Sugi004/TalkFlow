@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from auth import get_current_user
+from backend_auth import get_current_user
 from models import User
 import boto3
 import uuid

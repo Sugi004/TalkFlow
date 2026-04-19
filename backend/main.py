@@ -48,6 +48,8 @@ app = FastAPI(
 
 # CORS
 
+extra_frontend_origin = os.getenv("FRONTEND_URL")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -55,11 +57,12 @@ app.add_middleware(
         "http://localhost:3000",
         "http://localhost:8000",
         "http://127.0.0.1:3000",
+        
         "https://98-83-41-208.sslip.io",
         "https://www.talkflow.digital",
         "https://talkflow.digital",
         "https://dev-chat-asi7dqasn-sugi004s-projects.vercel.app",
-        ([os.getenv("FRONTEND_URL")] if os.getenv("FRONTEND_URL") else []),
+        *([extra_frontend_origin] if extra_frontend_origin else []),
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],

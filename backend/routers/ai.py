@@ -3,16 +3,14 @@ import json
 import os
 from typing import Optional
 
-import google.generativeai as genai
 import httpx
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException, status
-from google.api_core import exceptions as google_exceptions
 from sqlalchemy import and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from auth import get_current_user
+from backend_auth import get_current_user
 from database import get_db
 from message_crypto import decrypt_message_content
 from models import Conversation, Message, Participants, User
@@ -27,16 +25,23 @@ from schemas import (
 
 load_dotenv()
 
+try:
+    import google.generativeai as genai
+    from google.api_core import exceptions as google_exceptions
+except ImportError:
+    genai = None
+    google_exceptions = None
+
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 AI_PROVIDER = os.getenv("AI_PROVIDER", "auto").lower()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-if GOOGLE_API_KEY:
-    genai.configure(api_key=GOOGLE_API_KEY)
+if GEMINI_API_KEY and genai is not None:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 
 def active_ai_provider() -> str:
@@ -44,16 +49,16 @@ def active_ai_provider() -> str:
         return AI_PROVIDER
     if GROQ_API_KEY:
         return "groq"
-    if GOOGLE_API_KEY:
+    if GEMINI_API_KEY:
         return "gemini"
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail="No AI provider configured. Set GROQ_API_KEY or GOOGLE_API_KEY.",
+        detail="No AI provider configured. Set GROQ_API_KEY or GEMINI_API_KEY.",
     )
 
 
 def raise_gemini_http_error(exc: Exception):
-    if isinstance(exc, google_exceptions.ResourceExhausted):
+    if google_exceptions and isinstance(exc, google_exceptions.ResourceExhausted):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="AI quota exceeded. Please try again shortly or switch to a fallback provider.",
@@ -65,10 +70,15 @@ def raise_gemini_http_error(exc: Exception):
 
 
 async def generate_with_gemini(prompt: str) -> str:
-    if not GOOGLE_API_KEY:
+    if not GEMINI_API_KEY:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Gemini is not configured",
+        )
+    if genai is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Gemini dependencies are not installed",
         )
 
     model = genai.GenerativeModel(GEMINI_MODEL)

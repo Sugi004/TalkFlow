@@ -6,6 +6,9 @@ backend/*.pyo
 backend/.env
 
 backend/routers/__pycache__/
+backend/tests/__pycache__/
+backend/tests/*.pyc
+backend/tests/*.pyo
 # Node
 frontend/node_modules/
 frontend/dist/

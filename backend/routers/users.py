@@ -4,7 +4,7 @@ from sqlalchemy.future import select
 from database import get_db
 from models import User
 from schemas import UserResponse, UserSearch, UserUpdate
-from auth import get_current_user
+from backend_auth import get_current_user
 from limiter import limiter
 
 

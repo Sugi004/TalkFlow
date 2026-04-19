@@ -13,6 +13,7 @@ from database import get_db
 import models
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from cryptography.exceptions import UnsupportedAlgorithm
 
 load_dotenv()
 
@@ -26,6 +27,23 @@ PASSWORD_ENCRYPTION_PRIVATE_KEY = os.getenv("PASSWORD_ENCRYPTION_PRIVATE_KEY")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 _password_private_key = None
 _password_public_pem = None
+
+
+def _normalize_pem_env(value: Optional[str]) -> Optional[bytes]:
+    if value is None:
+        return None
+
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+
+    if (cleaned.startswith('"') and cleaned.endswith('"')) or (
+        cleaned.startswith("'") and cleaned.endswith("'")
+    ):
+        cleaned = cleaned[1:-1].strip()
+
+    cleaned = cleaned.replace("\\n", "\n")
+    return cleaned.encode("utf-8")
 
 
 def validate_password_strength(password: str):
@@ -47,19 +65,27 @@ def _load_password_encryption_keys():
     if _password_private_key is not None and _password_public_pem is not None:
         return _password_private_key, _password_public_pem
 
-    if PASSWORD_ENCRYPTION_PRIVATE_KEY:
-        private_key = serialization.load_pem_private_key(
-            PASSWORD_ENCRYPTION_PRIVATE_KEY.encode("utf-8"),
-            password=None,
-        )
-        if PASSWORD_ENCRYPTION_PUBLIC_KEY:
-            public_pem = PASSWORD_ENCRYPTION_PUBLIC_KEY.encode("utf-8")
-        else:
-            public_pem = private_key.public_key().public_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    private_key_pem = _normalize_pem_env(PASSWORD_ENCRYPTION_PRIVATE_KEY)
+    public_key_pem = _normalize_pem_env(PASSWORD_ENCRYPTION_PUBLIC_KEY)
+
+    if private_key_pem:
+        try:
+            private_key = serialization.load_pem_private_key(
+                private_key_pem,
+                password=None,
             )
-    else:
+        except (TypeError, ValueError, UnsupportedAlgorithm):
+            private_key = None
+        else:
+            if public_key_pem:
+                public_pem = public_key_pem
+            else:
+                public_pem = private_key.public_key().public_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PublicFormat.SubjectPublicKeyInfo,
+                )
+
+    if not private_key_pem or private_key is None:
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         public_pem = private_key.public_key().public_bytes(
             encoding=serialization.Encoding.PEM,

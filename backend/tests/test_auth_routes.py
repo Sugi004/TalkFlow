@@ -1,6 +1,7 @@
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
+from starlette.requests import Request
 
 from support import FakeScalarResult, ensure_backend_test_env
 
@@ -9,6 +10,17 @@ ensure_backend_test_env()
 from fastapi import HTTPException
 from schemas import UserCreate, UserLogin
 from routers.auth import auth_public_key, login, register, token
+
+
+def create_mock_request():
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/test-path",
+        "client": ("127.0.0.1", 123),
+        "headers": [],
+    }
+    return Request(scope)
 
 class AuthRouteTests(unittest.IsolatedAsyncioTestCase):
     async def test_register_rejects_duplicate_email(self):
@@ -22,7 +34,7 @@ class AuthRouteTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with self.assertRaises(HTTPException) as context:
-            await register(request=SimpleNamespace(), user_data=user_data, db=db)
+            await register(request=create_mock_request(), user_data=user_data, db=db)
 
         self.assertEqual(context.exception.status_code, 400)
         self.assertEqual(context.exception.detail, "Email already registered")
@@ -49,7 +61,7 @@ class AuthRouteTests(unittest.IsolatedAsyncioTestCase):
             patch("routers.auth.hash_password", return_value="hashed-password"),
             patch("routers.auth.create_access_token", return_value="jwt-token") as create_token,
         ):
-            response = await register(request=SimpleNamespace(), user_data=user_data, db=db)
+            response = await register(request=create_mock_request(), user_data=user_data, db=db)
 
         self.assertEqual(response, {"access_token": "jwt-token", "token_type": "bearer"})
         added_user = db.add.call_args.args[0]
@@ -85,7 +97,7 @@ class AuthRouteTests(unittest.IsolatedAsyncioTestCase):
             patch("routers.auth.hash_password", return_value="hashed-password"),
             patch("routers.auth.create_access_token", return_value="jwt-token"),
         ):
-            response = await register(request=SimpleNamespace(), user_data=user_data, db=db)
+            response = await register(request=create_mock_request(), user_data=user_data, db=db)
 
         self.assertEqual(response, {"access_token": "jwt-token", "token_type": "bearer"})
         added_user = db.add.call_args.args[0]
@@ -100,7 +112,7 @@ class AuthRouteTests(unittest.IsolatedAsyncioTestCase):
 
         with patch("routers.auth.verify_password", return_value=False):
             with self.assertRaises(HTTPException) as context:
-                await login(request=SimpleNamespace(), user_data=user_data, db=db)
+                await login(request=create_mock_request(), user_data=user_data, db=db)
 
         self.assertEqual(context.exception.status_code, 401)
         self.assertEqual(context.exception.detail, "Incorrect email or password")
@@ -136,7 +148,7 @@ class AuthRouteTests(unittest.IsolatedAsyncioTestCase):
             patch("routers.auth.verify_password", return_value=True) as verify_password,
             patch("routers.auth.create_access_token", return_value="jwt-token"),
         ):
-            response = await login(request=SimpleNamespace(), user_data=user_data, db=db)
+            response = await login(request=create_mock_request(), user_data=user_data, db=db)
 
         self.assertEqual(response, {"access_token": "jwt-token", "token_type": "bearer"})
         verify_password.assert_called_once_with("StrongPass1!", "hashed-password")

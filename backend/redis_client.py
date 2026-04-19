@@ -92,3 +92,4 @@ async def reset_unread_count(user_id: int, conversation_id: int):
 async def get_unread_count(user_id: int, conversation_id: int) -> int:
     return int(await redis_client.hget(f"unread_count:{user_id}", str(conversation_id)) or 0)
 
+

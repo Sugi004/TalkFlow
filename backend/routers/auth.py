@@ -6,14 +6,17 @@ from dotenv import load_dotenv
 import os
 from models import User
 from schemas import Token, UserCreate, UserLogin  
-from auth import (
+from backend_auth import (
     create_access_token,
     decrypt_password_payload,
     get_password_public_key_pem,
     hash_password,
-    validate_password_strength,
     verify_password,
+    validate_password_strength,
 )
+
+
+
 from limiter import limiter
 from fastapi.security import OAuth2PasswordRequestForm
 

@@ -5,7 +5,7 @@ from sqlalchemy import and_, update
 from database import get_db
 from models import User, Message, Participants, MessageStatus
 from schemas import MessageResponse, MessageCreate, UserSearch
-from auth import get_current_user
+from backend_auth import get_current_user
 from message_crypto import decrypt_message_content, encrypt_message_content
 from typing import List
 
