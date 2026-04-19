@@ -58,6 +58,7 @@ app.add_middleware(
         "https://98-83-41-208.sslip.io",
         "https://www.talkflow.digital",
         "https://talkflow.digital",
+        "https://dev-chat-asi7dqasn-sugi004s-projects.vercel.app",
         os.getenv("FRONTEND_URL", ""),
     ],
     allow_credentials=True,
