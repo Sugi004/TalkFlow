@@ -10,18 +10,18 @@ def ensure_backend_test_env() -> Path:
 
     os.environ.setdefault(
         "DATABASE_URL",
-        "postgresql+asyncpg://devchat:devchat@localhost:5432/devchat_test",
+        "postgresql+asyncpg://talkflow:talkflow@localhost:5432/talkflow_test",
     )
-    os.environ.setdefault("SECRET_KEY", "devchat-test-secret")
+    os.environ.setdefault("SECRET_KEY", "talkflow-test-secret")
     os.environ.setdefault("ALGORITHM", "HS256")
     os.environ.setdefault("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
-    os.environ.setdefault("MESSAGE_ENCRYPTION_KEY", "devchat-test-message-key")
+    os.environ.setdefault("MESSAGE_ENCRYPTION_KEY", "talkflow-test-message-key")
     os.environ.setdefault("FRONTEND_URL", "http://localhost:3000")
     os.environ.setdefault("REDIS_HOST", "localhost")
     os.environ.setdefault("REDIS_PORT", "6379")
-    os.environ.setdefault("S3_BUCKET", "devchat-test-bucket")
+    os.environ.setdefault("S3_BUCKET", "talkflow-test-bucket")
     os.environ.setdefault("AWS_REGION", "us-east-1")
-    os.environ.setdefault("GOOGLE_API_KEY", "devchat-test-google-key")
+    os.environ.setdefault("GOOGLE_API_KEY", "talkflow-test-google-key")
 
     return backend_dir
 

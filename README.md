@@ -1,8 +1,8 @@
-# DevChat
+# TalkFlow
 
-DevChat is a full-stack real-time chat application built as a portfolio-ready project with direct messaging, group conversations, AI-assisted chat tools, profile management, media/file sharing, and a responsive chat experience across desktop and mobile.
+ TalkFlow is a full-stack real-time chat application built as a portfolio-ready project with direct messaging, group conversations, AI-assisted chat tools, profile management, media/file sharing, and a responsive chat experience across desktop and mobile.
 
-![DevChat chat screenshot](docs/images/chat-flow.png)
+![TalkFlow chat screenshot](docs/images/chat-flow.png)
 
 ## What The Project Does
 
@@ -17,7 +17,7 @@ DevChat is a full-stack real-time chat application built as a portfolio-ready pr
 ## Repository Layout
 
 ```text
-devchat/
+talkflow/
 ├── backend/
 │   ├── auth.py
 │   ├── database.py

@@ -211,7 +211,7 @@ export default function ChatPage() {
                 {showLeaveModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
                         <div className="w-full max-w-sm rounded-lg border border-[#1e2a35] bg-[#0d1117] p-5 shadow-2xl sm:p-6">
-                            <h2 className="text-[14px] font-bold text-[#c9d8e8] font-mono mb-2">Leave DevChat?</h2>
+                            <h2 className="text-[14px] font-bold text-[#c9d8e8] font-mono mb-2">Leave TalkFlow?</h2>
                             <p className="text-[12px] text-[#4a6070] font-mono mb-6">
                                 You may miss incoming messages while you&apos;re away.
                             </p>

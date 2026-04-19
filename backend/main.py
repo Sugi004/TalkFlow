@@ -37,8 +37,8 @@ class SecurityHeaderMiddleware(BaseHTTPMiddleware):
 
 # App
 app = FastAPI(
-    title="DevChat API",
-    description="API for DevChat",
+    title="TalkFlow API",
+    description="API for TalkFlow",
     version="1.0.0",
     openapi_url="/openapi.json",
     docs_url="/docs",
@@ -94,6 +94,6 @@ async def create_tables():
 
 @app.get("/")
 async def root():
-    return {"message": "DevChat API is running"}
+    return {"message": "TalkFlow API is running"}
 
 

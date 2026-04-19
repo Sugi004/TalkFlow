@@ -159,7 +159,7 @@ export default function Register() {
                     <span className="w-[11px] h-[11px] rounded-full bg-[#febc2e]" />
                     <span className="w-[11px] h-[11px] rounded-full bg-[#28c840]" />
                     <span className="mx-auto text-[11px] text-[#4a6070] tracking-widest font-mono">
-                        devchat — register.tsx
+                        talkflow — register.tsx
                     </span>
                 </div>
 
@@ -168,8 +168,8 @@ export default function Register() {
 
                     {/* Logo */}
                     <div className="flex items-center gap-2 mb-5">
-                        <span className="w-6 h-6 bg-cyan-400 rounded flex items-center justify-center text-[11px] font-bold text-[#080c10]">D</span>
-                        <span className="font-bold text-cyan-400 text-xs tracking-[.15em] uppercase font-sans">DevChat</span>
+                        <span className="w-6 h-6 bg-cyan-400 rounded flex items-center justify-center text-[11px] font-bold text-[#080c10]">T</span>
+                        <span className="font-bold text-cyan-400 text-xs tracking-[.15em] uppercase font-sans">TalkFlow</span>
                     </div>
 
                     {/* Heading */}

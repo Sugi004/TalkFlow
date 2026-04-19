@@ -249,8 +249,8 @@ export default function Chatlist({
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3.5 border-b border-[#1e2a35]">
                     <div className="flex items-center gap-2">
-                        <span className="w-6 h-6 bg-cyan-400 rounded flex items-center justify-center text-[11px] font-bold text-[#080c10]">D</span>
-                        <span className="text-cyan-400 text-[11px] font-bold tracking-[.15em] uppercase font-mono">DevChat</span>
+                        <span className="w-6 h-6 bg-cyan-400 rounded flex items-center justify-center text-[11px] font-bold text-[#080c10]">T</span>
+                        <span className="text-cyan-400 text-[11px] font-bold tracking-[.15em] uppercase font-mono">TalkFlow</span>
                     </div>
                     <button
                         onClick={() => setShowModal(true)}

@@ -7,8 +7,8 @@ import { Toaster } from "react-hot-toast";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "DevChat",
-  description: "A real-time chat for developers",
+  title: "TalkFlow",
+  description: "A real-time messaging app",
 };
 
 export default function RootLayout({

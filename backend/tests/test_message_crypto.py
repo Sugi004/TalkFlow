@@ -12,7 +12,7 @@ from message_crypto import decrypt_message_content, encrypt_message_content, is_
 class MessageCryptoTests(unittest.TestCase):
     def setUp(self):
         self.previous_key = os.environ.get("MESSAGE_ENCRYPTION_KEY")
-        os.environ["MESSAGE_ENCRYPTION_KEY"] = "devchat-test-message-key"
+        os.environ["MESSAGE_ENCRYPTION_KEY"] = "talkflow-test-message-key"
 
     def tearDown(self):
         if self.previous_key is None:
@@ -21,7 +21,7 @@ class MessageCryptoTests(unittest.TestCase):
             os.environ["MESSAGE_ENCRYPTION_KEY"] = self.previous_key
 
     def test_roundtrip_encrypts_and_decrypts_plaintext(self):
-        plaintext = "hello from DevChat"
+        plaintext = "hello from TalkFlow"
         encrypted = encrypt_message_content(plaintext)
 
         self.assertNotEqual(encrypted, plaintext)
