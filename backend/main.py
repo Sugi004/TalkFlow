@@ -59,7 +59,7 @@ app.add_middleware(
         "https://www.talkflow.digital",
         "https://talkflow.digital",
         "https://dev-chat-asi7dqasn-sugi004s-projects.vercel.app",
-        os.getenv("FRONTEND_URL", []),
+        ([os.getenv("FRONTEND_URL")] if os.getenv("FRONTEND_URL") else []),
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
