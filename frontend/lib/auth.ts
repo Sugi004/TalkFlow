@@ -12,7 +12,6 @@ interface ApiErrorShape {
         };
     };
 }
-
 export const login = async (email: string, password: string): Promise<Token> => {
     const formData = new URLSearchParams();
     formData.append("username", email);

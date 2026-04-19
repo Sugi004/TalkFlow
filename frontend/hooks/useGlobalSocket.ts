@@ -41,6 +41,8 @@ export function useGlobalSocket({
         if (!user_id || !token || !isMounted.current) return;
         const url = `${WS_URL}/user/${user_id}?token=${token}`;
         const ws = new WebSocket(url);
+
+        console.log("WS URL", url);
         wsRef.current = ws;
 
         ws.onmessage = (e) => {

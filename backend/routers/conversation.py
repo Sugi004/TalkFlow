@@ -262,7 +262,7 @@ def build_conversation_list_item(
     )
 
 # Get ALL conversations
-@router.get("/", response_model=list[ConversationListItem])
+@router.get("", response_model=list[ConversationListItem])
 async def get_conversations(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     current_participant = aliased(Participants)
     result = await db.execute(

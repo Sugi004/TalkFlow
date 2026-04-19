@@ -26,8 +26,6 @@ export const useConversations = () =>  {
 
         return {
             ...conv,
-            // The API already returns a correct other_user with is_online from Redis.
-            // Only fall back to participants if other_user is absent (e.g. freshly created conv).
             other_user: conv.is_group
                 ? null
                 : conv.other_user

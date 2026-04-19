@@ -1,11 +1,41 @@
 import axios from "axios";
 
+function resolveApiBaseUrl(): string | undefined {
+    const raw = process.env.NEXT_PUBLIC_API_URL?.trim();
+
+    if (!raw) {
+        if (typeof window !== "undefined") {
+            return window.location.origin;
+        }
+        return undefined;
+    }
+
+    try {
+        const url = new URL(raw);
+
+        // Always upgrade remote API hosts to HTTPS.
+        // Keep localhost and 127.0.0.1 untouched for local backend development.
+        if (
+            url.protocol === "http:"
+            && url.hostname !== "localhost"
+            && url.hostname !== "127.0.0.1"
+        ) {
+            url.protocol = "https:";
+        }
+
+        return url.toString().replace(/\/$/, "");
+    } catch {
+        return raw.replace(/\/$/, "");
+    }
+}
 
 const api = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_API_URL,
+    baseURL: resolveApiBaseUrl(),
 });
 
+
 api.interceptors.request.use((config) => {
+    config.baseURL = resolveApiBaseUrl();
     if (typeof window !== "undefined"){
         const token = sessionStorage.getItem("token");
         if (token){
