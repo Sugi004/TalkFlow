@@ -18,16 +18,17 @@ export function LogoLoader({
                 <div className="absolute inset-[-8%] rounded-full border border-cyan-300/15 animate-[auth-ring_3.6s_linear_infinite]" />
                 <div className="absolute inset-[-18%] rounded-full border border-cyan-300/10 animate-[auth-ring_3.6s_linear_infinite] [animation-delay:1.2s]" />
 
-                <div className="relative overflow-hidden rounded-[2rem] border border-cyan-300/15 bg-[#09131b]/92 px-8 py-7 shadow-[0_0_60px_rgba(0,153,255,.16)] backdrop-blur-sm">
-                    <span className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/60 to-transparent" />
-                    <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/10 to-transparent animate-[auth-scan_2.2s_ease-in-out_infinite]" />
+                <div className="relative overflow-hidden rounded-2xl border border-cyan-300/15 bg-[#09131b]/92 px-8 py-7 shadow-[0_0_60px_rgba(0,153,255,.16)] backdrop-blur-sm">
+                    <span className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-cyan-300/60 to-transparent" />
+                    <span className="absolute inset-0 -translate-x-full bg-linear-to-r from-transparent via-white/10 to-transparent animate-[auth-scan_2.2s_ease-in-out_infinite]" />
                     <Image
-                        src="/talkflow-chat-logo.png"
+                        src="/TalkFlow_Chat_Logo.jpg"
                         alt="TalkFlow"
-                        width={340}
-                        height={340}
+                        width={192}
+                        height={192}
                         priority
-                        className="relative h-auto w-[220px] animate-[auth-float_5s_ease-in-out_infinite]"
+                        unoptimized
+                        className="relative h-auto w-[220px] animate-[auth-float_5s_ease-in-out_infinite] object-contain rounded-2xl"
                     />
                 </div>
             </div>
