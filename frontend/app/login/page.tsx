@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { login, getErrorMessage } from "@/lib/auth";
 import { useAuth } from "@/context/AuthContext";
 import toast from "react-hot-toast";
+import { AuthBackground } from "@/components/ui/AuthBackground";
 
 export default function Login() {
     const [email, setEmail] = useState("");
@@ -25,7 +27,8 @@ export default function Login() {
     useEffect(() => {
         setMounted(true);
         emailRef.current?.focus();
-    }, []);
+        router.prefetch("/auth-loading");
+    }, [router]);
 
     useEffect(() => {
         if (!mounted) return;
@@ -58,7 +61,7 @@ export default function Login() {
         try {
             const data = await login(email, password);
             authLogin(data.access_token);
-            router.push("/chat");
+            router.push("/auth-loading");
 
         } catch (error: unknown) {
             toast.error(getErrorMessage(error, "Invalid email or password"));
@@ -70,26 +73,10 @@ export default function Login() {
     const clearErr = (f: keyof typeof errors) => setErrors((p) => ({ ...p, [f]: undefined }));
 
     return (
-        <div className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden bg-[#080c10] px-4 py-6 sm:min-h-screen sm:py-10">
+        <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#080c10] px-4 py-6 sm:min-h-screen sm:py-10">
+            <AuthBackground />
 
-            {/* Grid background */}
-            <div
-                className="fixed inset-0 pointer-events-none"
-                style={{
-                    backgroundImage:
-                        "linear-gradient(rgba(0,204,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(0,204,255,.035) 1px,transparent 1px)",
-                    backgroundSize: "40px 40px",
-                }}
-            />
-            {/* Corner glows */}
-            <div
-                className="fixed -top-40 -left-40 w-[480px] h-[480px] rounded-full pointer-events-none"
-                style={{ background: "radial-gradient(circle,rgba(0,204,255,.13) 0%,transparent 70%)" }}
-            />
-            <div
-                className="fixed -bottom-48 -right-48 w-[560px] h-[560px] rounded-full pointer-events-none"
-                style={{ background: "radial-gradient(circle,rgba(0,255,157,.09) 0%,transparent 70%)" }}
-            />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,156,255,.08),transparent_28%),linear-gradient(180deg,transparent_0%,rgba(0,0,0,.18)_100%)]" />
 
             {/* Card */}
             <div
@@ -110,11 +97,27 @@ export default function Login() {
                 <div className="px-5 py-6 sm:px-10 sm:py-9">
 
                     {/* Logo */}
-                    <div className="flex items-center gap-2 mb-5">
-                        <span className="w-6 h-6 bg-cyan-400 rounded flex items-center justify-center text-[11px] font-bold text-[#080c10]">T</span>
-                        <span className="font-bold text-cyan-400 text-xs tracking-[.15em] uppercase font-sans">
-                            TalkFlow
-                        </span>
+                    <div className="mb-8 flex items-center gap-5">
+                        <div className="grid h-[114px] w-[132px] shrink-0 place-items-center rounded-[30px] border border-cyan-300/15 bg-[#0a1520] p-3 shadow-[0_0_32px_rgba(0,204,255,.1)]">
+                            <div className="grid h-full w-full place-items-center rounded-[22px] bg-white/98 px-2 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,.35)]">
+                                <Image
+                                    src="/android-chrome-192x192.png"
+                                    alt="TalkFlow"
+                                    width={102}
+                                    height={78}
+                                    priority
+                                    className="block h-[78px] w-[102px] object-contain object-center"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex min-w-0 flex-col">
+                            <span className="font-bold text-cyan-400 text-[15px] tracking-[.24em] uppercase font-sans">
+                                TalkFlow
+                            </span>
+                            <span className="mt-2 font-mono text-[11px] uppercase tracking-[0.38em] text-[#6f8aa1]">
+                                Connect & chat
+                            </span>
+                        </div>
                     </div>
 
                     {/* Heading */}
@@ -220,9 +223,8 @@ export default function Login() {
                             {/* shimmer */}
                             <span className="absolute inset-0 bg-linear-to-r from-transparent via-white/20 to-transparent -translate-x-full hover:translate-x-full transition-transform duration-500 pointer-events-none" />
                             {loading ? (
-                                <span className="flex items-center justify-center gap-2">
-                                    <span className="w-3.5 h-3.5 border-2 border-[#080c10]/30 border-t-[#080c10] rounded-full animate-spin" />
-                                    Authenticating...
+                                <span className="flex items-center justify-center font-mono text-[11px] tracking-[0.18em]">
+                                    Verifying access...
                                 </span>
                             ) : (
                                 "Sign In →"

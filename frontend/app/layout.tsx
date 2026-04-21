@@ -11,6 +11,14 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "TalkFlow",
   description: "A real-time messaging app",
+  icons: {
+    icon: [
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/android-chrome-192x192.png", sizes: "192x192", type: "image/png" },
+    ],
+    shortcut: "/favicon-32x32.png",
+    apple: "/android-chrome-192x192.png",
+  },
 };
 
 export default function RootLayout({
