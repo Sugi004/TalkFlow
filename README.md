@@ -7,6 +7,7 @@ TalkFlow is a full-stack real-time chat application built as a portfolio-ready p
 ## What The Project Does
 
 - Authenticates users with email/password and JWT bearer tokens
+- Requires email verification before password login is allowed
 - Supports direct conversations and admin-aware group conversations
 - Delivers live messages, typing indicators, presence events, and read receipts over WebSockets
 - Stores message bodies encrypted at rest on the backend
@@ -92,6 +93,7 @@ talkflow/
 ### Security model
 
 - Passwords are hashed with `bcrypt`
+- Newly registered accounts remain unverified until the email verification link is used
 - JWT access tokens authenticate REST and WebSocket flows
 - Message bodies are encrypted at rest before persistence
 - Uploads are filtered through extension and MIME allowlists
@@ -107,6 +109,8 @@ This project is not end-to-end encrypted today. The backend decrypts message con
 ### Auth
 
 - `POST /auth/register`
+- `POST /auth/resend-verification`
+- `GET /auth/verify-email?token=...`
 - `POST /auth/login`
 - `POST /auth/token`
 
@@ -155,7 +159,7 @@ This project is not end-to-end encrypted today. The backend decrypts message con
 
 ### User
 
-- Account identity, password hash, display name, avatar URL, online metadata, timestamps
+- Account identity, password hash, verification state, username/display name, avatar URL, online metadata, timestamps
 
 ### Conversation
 
@@ -186,6 +190,7 @@ This project is not end-to-end encrypted today. The backend decrypts message con
 ### Frontend responsibilities
 
 - `frontend/app/` contains route-level pages and layout files
+- `frontend/app/verify-email` and `frontend/app/email-verified` cover the verification flow after registration and after the email link is opened
 - `frontend/components/chat/` contains the main chat presentation components
 - `frontend/context/AuthContext.tsx` manages client auth state
 - `frontend/hooks/useWebSocket.ts` manages per-conversation realtime sockets
@@ -243,6 +248,16 @@ npm run dev
 - Backend docs: `http://localhost:8000/docs`
 - Backend OpenAPI: `http://localhost:8000/openapi.json`
 
+## Authentication And Email Verification Flow
+
+1. The frontend fetches `GET /auth/public-key` and encrypts the password before sending register or login requests.
+2. `POST /auth/register` creates the account in an unverified state and triggers a verification email.
+3. The frontend then routes the user to `/verify-email?email=...`, where they can wait for the message or request another one.
+4. The email link hits `GET /auth/verify-email?token=...`, which marks the account verified and redirects the user to `/email-verified`.
+5. Only after verification can the user successfully sign in with `POST /auth/login` or `POST /auth/token`.
+
+For local development, the backend can be configured to log the verification link instead of sending a real email.
+
 ## Environment Variables
 
 ### Backend
@@ -255,7 +270,17 @@ npm run dev
 | `ALGORITHM`                   | Yes         | JWT signing algorithm, typically `HS256`        |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | No          | JWT expiration window                           |
 | `MESSAGE_ENCRYPTION_KEY`      | Recommended | Dedicated key for message encryption at rest    |
-| `FRONTEND_URL`                | No          | Extra CORS origin for deployed frontend         |
+| `FRONTEND_URL`                | Recommended | Frontend origin used for CORS and verification redirects |
+| `BACKEND_PUBLIC_URL`          | Recommended | Public backend base URL used in verification email links |
+| `EMAIL_DELIVERY_MODE`         | No          | Email transport mode: `resend`, `smtp`, `auto`, or `local` |
+| `RESEND_API_KEY`              | Recommended | Resend API key for verification email delivery  |
+| `EMAIL_FROM`                  | Recommended | Verified sender address used for verification emails |
+| `SMTP_HOST`                   | No          | SMTP host when using SMTP mode or fallback      |
+| `SMTP_PORT`                   | No          | SMTP port when using SMTP mode or fallback      |
+| `SMTP_USER`                   | No          | SMTP username                                   |
+| `SMTP_PASSWORD`               | No          | SMTP password                                   |
+| `SMTP_USE_SSL`                | No          | Enables implicit SSL SMTP connections           |
+| `SMTP_USE_STARTTLS`           | No          | Enables STARTTLS SMTP upgrade                   |
 | `REDIS_HOST`                  | No          | Redis host                                      |
 | `REDIS_PORT`                  | No          | Redis port                                      |
 | `REDIS_PASSWORD`              | No          | Redis password                                  |
@@ -271,6 +296,13 @@ npm run dev
 | --------------------- | -------- | --------------------------- |
 | `NEXT_PUBLIC_API_URL` | No       | REST API base URL override  |
 | `NEXT_PUBLIC_WS_URL`  | No       | WebSocket base URL override |
+
+### Email verification notes
+
+- If you use Resend, `EMAIL_FROM` must belong to a verified sender on your configured domain.
+- If `FRONTEND_URL` is missing or stale, verification redirects can point to the wrong host.
+- In `local` delivery mode, the backend logs the verification link instead of sending an email.
+- The frontend must ship `/login`, `/verify-email`, and `/email-verified` for the verification flow to work in production.
 
 ## Testing
 

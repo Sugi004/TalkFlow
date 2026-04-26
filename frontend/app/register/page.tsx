@@ -119,7 +119,6 @@ export default function Register() {
         if (!form.username.trim()) e.username = "Username is required";
         else if (form.username.length < 3) e.username = "Min 3 characters";
         else if (!/^[a-zA-Z0-9_]+$/.test(form.username)) e.username = "Letters, numbers, underscores only";
-        else if (usernameStatus === "taken") e.username = usernameMessage || "Username is already taken";
 
         if (!form.email.trim()) e.email = "Email is required";
         else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = "Invalid email address";
@@ -168,7 +167,7 @@ export default function Register() {
     const inputErr = "border-[#ff4d6d] focus:shadow-[0_0_0_3px_rgba(255,77,109,.12)]";
 
     return (
-        <div className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden bg-[#080c10] px-4 py-6 sm:min-h-screen sm:py-10">
+        <div className="relative flex min-h-100dvh items-center justify-center overflow-hidden bg-[#080c10] px-4 py-6 sm:min-h-screen sm:py-10">
 
             {/* Grid */}
             <div
@@ -196,7 +195,7 @@ export default function Register() {
                     <span className="w-[11px] h-[11px] rounded-full bg-[#febc2e]" />
                     <span className="w-[11px] h-[11px] rounded-full bg-[#28c840]" />
                     <span className="mx-auto text-[11px] text-[#4a6070] tracking-widest font-mono">
-                        talkflow — register.tsx
+                        Register
                     </span>
                 </div>
 
