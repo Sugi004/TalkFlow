@@ -45,21 +45,6 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-async def get_existing_user_by_username(
-    db: AsyncSession,
-    username: str,
-    *,
-    exclude_user_id: int | None = None,
-):
-    normalized_username = username.strip().lower()
-    query = select(User).where(func.lower(User.full_name) == normalized_username)
-    if exclude_user_id is not None:
-        query = query.where(User.id != exclude_user_id)
-
-    result = await db.execute(query)
-    return result.scalar_one_or_none()
-
-
 def get_frontend_url(path: str, **params: str) -> str:
     frontend_base_url = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
     query = urlencode(params)
@@ -104,13 +89,6 @@ async def register(request: Request,user_data: UserCreate, db: AsyncSession = De
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
         )
-    if user_data.full_name:
-        existing_username = await get_existing_user_by_username(db, user_data.full_name)
-        if existing_username:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Username is already taken"
-            )
     password = resolve_password(user_data.password, user_data.password_encrypted)
     try:
         validate_password_strength(password)
