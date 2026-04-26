@@ -86,6 +86,10 @@ class UserSearch(BaseModel):
     class Config:
         from_attributes = True
 
+class UsernameAvailabilityResponse(BaseModel):
+    available: bool
+    message: str
+
 class UserResponse(BaseModel):
     id: int
     email: EmailStr

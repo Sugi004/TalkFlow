@@ -3,7 +3,6 @@
 
 import { useState, useEffect, useRef, ChangeEvent } from "react"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
 import { useAuth } from "@/context/AuthContext"
 import { deleteMyAvatar, getMe, updateMe } from "@/lib/users"
 import { User } from "@/types/index"
@@ -30,6 +29,7 @@ export default function ProfilePage() {
 
     const [user, setUser] = useState<User | null>(null)
     const [fullName, setFullName] = useState("")
+    const [usernameError, setUsernameError] = useState("")
     const [uploading, setUploading] = useState(false)
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
@@ -82,15 +82,28 @@ export default function ProfilePage() {
     async function handleSave() {
         if (!user) return;
         setSaving(true)
+        setUsernameError("")
         try {
             const updated = await updateMe({ full_name: fullName.trim() || undefined })
             setUser(updated)
-            toast.success("Profile updated")
+            refreshUser()
+            setUsernameError("")
+            toast.success("Username updated")
         } catch (error: unknown) {
-            toast.error(getErrorMessage(error, "Failed to save"));
+            const message = getErrorMessage(error, "Failed to save")
+            if (message.toLowerCase().includes("username")) {
+                setUsernameError(message)
+            } else {
+                toast.error(message)
+            }
         } finally {
             setSaving(false)
         }
+    }
+
+    function handleBackToChat() {
+        refreshUser()
+        window.location.assign("/chat")
     }
 
     useEffect(() => {
@@ -293,9 +306,13 @@ export default function ProfilePage() {
 
                         {/* Nav */}
                         <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <Link href="/chat" className="flex items-center gap-1.5 text-[11px] text-[#4a6070] hover:text-cyan-400 transition-colors font-mono">
+                            <button
+                                type="button"
+                                onClick={handleBackToChat}
+                                className="flex items-center gap-1.5 text-[11px] text-[#4a6070] hover:text-cyan-400 transition-colors font-mono"
+                            >
                                 ← Back to chat
-                            </Link>
+                            </button>
                             <button
                                 onClick={handleSignOut}
                                 className="flex items-center gap-1.5 text-[11px] text-[#4a6070] hover:text-[#ff4d6d] transition-colors"
@@ -391,10 +408,20 @@ export default function ProfilePage() {
                                         <input
                                             type="text"
                                             value={fullName}
-                                            onChange={(e) => setFullName(e.target.value)}
-                                            placeholder="Your full name"
+                                            onChange={(e) => {
+                                                setFullName(e.target.value)
+                                                setUsernameError("")
+                                            }}
+                                            placeholder="Same username shown across TalkFlow"
                                             className="w-full bg-[#060a0e] border border-[#1e2a35] rounded px-3.5 py-3 font-mono text-[13px] text-[#c9d8e8] placeholder-[#364a58] outline-none transition-all caret-cyan-400 focus:border-cyan-400 focus:shadow-[0_0_0_3px_rgba(0,204,255,.1)]"
                                         />
+                                        {usernameError ? (
+                                            <p className="text-[11px] text-[#ff4d6d] font-mono">✕ {usernameError}</p>
+                                        ) : (
+                                            <p className="text-[11px] text-[#6f8598]">
+                                                This is the same field you set during registration.
+                                            </p>
+                                        )}
                                     </div>
 
                                     {/* Email (read-only) */}

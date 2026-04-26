@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { getErrorMessage, register } from "@/lib/auth";
+import { checkUsernameAvailability, getErrorMessage, register } from "@/lib/auth";
 import toast from "react-hot-toast";
 
 interface FormState {
@@ -19,6 +19,8 @@ interface FieldErrors {
     confirm?: string;
     general?: string;
 }
+
+type UsernameStatus = "idle" | "checking" | "available" | "taken";
 
 function getStrength(pw: string): { score: number; label: string; color: string; bar: string } {
     let s = 0;
@@ -47,6 +49,8 @@ export default function Register() {
     const [mounted, setMounted] = useState(false);
     const [typed, setTyped] = useState("");
     const [cursor, setCursor] = useState(true);
+    const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>("idle");
+    const [usernameMessage, setUsernameMessage] = useState("");
 
     const usernameRef = useRef<HTMLInputElement>(null);
     const router = useRouter();
@@ -70,10 +74,43 @@ export default function Register() {
         return () => clearInterval(t);
     }, []);
 
+    useEffect(() => {
+        const username = form.username.trim();
+        if (!username || username.length < 3 || !/^[a-zA-Z0-9_]+$/.test(username)) {
+            setUsernameStatus("idle");
+            setUsernameMessage("");
+            return;
+        }
+
+        let cancelled = false;
+        const timeoutId = window.setTimeout(async () => {
+            setUsernameStatus("checking");
+            try {
+                const result = await checkUsernameAvailability(username);
+                if (cancelled) return;
+                setUsernameStatus(result.available ? "available" : "taken");
+                setUsernameMessage(result.message);
+            } catch {
+                if (cancelled) return;
+                setUsernameStatus("idle");
+                setUsernameMessage("");
+            }
+        }, 450);
+
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timeoutId);
+        };
+    }, [form.username]);
+
     function set(k: keyof FormState) {
         return (e: React.ChangeEvent<HTMLInputElement>) => {
             setForm((f) => ({ ...f, [k]: e.target.value }));
             setErrors((er) => ({ ...er, [k]: undefined, general: undefined }));
+            if (k === "username") {
+                setUsernameStatus("idle");
+                setUsernameMessage("");
+            }
         };
     }
 
@@ -82,6 +119,7 @@ export default function Register() {
         if (!form.username.trim()) e.username = "Username is required";
         else if (form.username.length < 3) e.username = "Min 3 characters";
         else if (!/^[a-zA-Z0-9_]+$/.test(form.username)) e.username = "Letters, numbers, underscores only";
+        else if (usernameStatus === "taken") e.username = usernameMessage || "Username is already taken";
 
         if (!form.email.trim()) e.email = "Email is required";
         else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = "Invalid email address";
@@ -112,7 +150,14 @@ export default function Register() {
                 router.push(`/verify-email?email=${encodeURIComponent(form.email.trim())}`);
             }, 1200);
         } catch (error: unknown) {
-            setErrors({ general: getErrorMessage(error, "Cannot reach server. Is the backend running?") });
+            const message = getErrorMessage(error, "Cannot reach server. Is the backend running?");
+            if (message.toLowerCase().includes("username")) {
+                setUsernameStatus("taken");
+                setUsernameMessage(message);
+                setErrors({ username: message });
+            } else {
+                setErrors({ general: message });
+            }
         } finally {
             setLoading(false);
         }
@@ -202,6 +247,15 @@ export default function Register() {
                                 className={`${inputBase} ${errors.username ? inputErr : inputOk}`}
                             />
                             {errors.username && <span className="text-[11px] text-[#ff4d6d] font-mono">✕ {errors.username}</span>}
+                            {!errors.username && usernameStatus === "checking" && (
+                                <span className="text-[11px] text-[#9cb3c4] font-mono">… checking username</span>
+                            )}
+                            {!errors.username && usernameStatus === "available" && (
+                                <span className="text-[11px] text-[#00ff9d] font-mono">✓ {usernameMessage}</span>
+                            )}
+                            {!errors.username && usernameStatus === "taken" && (
+                                <span className="text-[11px] text-[#ff4d6d] font-mono">✕ {usernameMessage}</span>
+                            )}
                         </div>
 
                         {/* Email */}

@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from urllib.parse import urlencode
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import RedirectResponse
@@ -43,6 +44,35 @@ ALGORITHM = os.getenv("ALGORITHM")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9_]+$")
+
+
+async def get_existing_user_by_username(db: AsyncSession, username: str):
+    result = await db.execute(
+        select(User).where(func.lower(User.full_name) == username.strip().lower())
+    )
+    return result.scalar_one_or_none()
+
+
+def validate_registration_username(username: str | None) -> str | None:
+    if username is None:
+        return None
+
+    username = username.strip()
+    if not username:
+        return None
+    if len(username) < 3:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Username must be at least 3 characters long",
+        )
+    if not USERNAME_PATTERN.match(username):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Username can only contain letters, numbers, and underscores",
+        )
+    return username
 
 
 def get_frontend_url(path: str, **params: str) -> str:
@@ -89,6 +119,14 @@ async def register(request: Request,user_data: UserCreate, db: AsyncSession = De
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
         )
+    normalized_username = validate_registration_username(user_data.full_name)
+    if normalized_username:
+        existing_username = await get_existing_user_by_username(db, normalized_username)
+        if existing_username:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username is already taken"
+            )
     password = resolve_password(user_data.password, user_data.password_encrypted)
     try:
         validate_password_strength(password)
@@ -103,7 +141,7 @@ async def register(request: Request,user_data: UserCreate, db: AsyncSession = De
         email=user_data.email,
         hashed_password=hashed_password,
         is_email_verified=False,
-        full_name=user_data.full_name,
+        full_name=normalized_username,
         avatar_url=user_data.avatar_url
     )
     db.add(new_user)

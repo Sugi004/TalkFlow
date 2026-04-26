@@ -8,11 +8,41 @@ from support import FakeScalarResult, ensure_backend_test_env
 ensure_backend_test_env()
 
 from fastapi import HTTPException
-from routers.users import search_users, update_me
+from routers.users import check_username, search_users, update_me
 from schemas import UserUpdate
 
 
 class UsersRouteTests(unittest.IsolatedAsyncioTestCase):
+    async def test_check_username_returns_available_for_unused_username(self):
+        db = SimpleNamespace(
+            execute=AsyncMock(return_value=FakeScalarResult(value=None)),
+        )
+
+        response = await check_username(username="unique_handle", db=db)
+
+        self.assertEqual(response, {"available": True, "message": "Username is available"})
+        db.execute.assert_awaited_once()
+
+    async def test_check_username_returns_taken_for_existing_username(self):
+        db = SimpleNamespace(
+            execute=AsyncMock(return_value=FakeScalarResult(value=SimpleNamespace(id=2, full_name="unique_handle"))),
+        )
+
+        response = await check_username(username="Unique_Handle", db=db)
+
+        self.assertEqual(response, {"available": False, "message": "Username is already taken"})
+        db.execute.assert_awaited_once()
+
+    async def test_check_username_returns_validation_message_for_invalid_username(self):
+        db = SimpleNamespace(
+            execute=AsyncMock(),
+        )
+
+        response = await check_username(username="ab", db=db)
+
+        self.assertEqual(response, {"available": False, "message": "Username must be at least 3 characters long"})
+        db.execute.assert_not_called()
+
     async def test_update_me_only_changes_supplied_fields(self):
         current_user = SimpleNamespace(
             id=1,

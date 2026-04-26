@@ -1,20 +1,50 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from database import get_db
 from models import User
-from schemas import UserResponse, UserSearch, UserUpdate
+from schemas import UserResponse, UserSearch, UserUpdate, UsernameAvailabilityResponse
 from backend_auth import get_current_user
 from limiter import limiter
 
 
 router = APIRouter(prefix="/users", tags=["users"])
+USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9_]+$")
+
+
+def get_username_availability_message(username: str) -> tuple[bool, str]:
+    normalized = username.strip()
+    if not normalized:
+        return False, "Username is required"
+    if len(normalized) < 3:
+        return False, "Username must be at least 3 characters long"
+    if not USERNAME_PATTERN.match(normalized):
+        return False, "Letters, numbers, and underscores only"
+    return True, normalized
 
 # Get current user
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.get("/check-username", response_model=UsernameAvailabilityResponse)
+async def check_username(username: str = Query(...), db: AsyncSession = Depends(get_db)):
+    is_valid, message = get_username_availability_message(username)
+    if not is_valid:
+        return {"available": False, "message": message}
+
+    result = await db.execute(
+        select(User).where(func.lower(User.full_name) == message.lower())
+    )
+    user = result.scalar_one_or_none()
+    if user is not None:
+        return {"available": False, "message": "Username is already taken"}
+
+    return {"available": True, "message": "Username is available"}
 
 # Update current user
 @router.put("/me", response_model=UserResponse)

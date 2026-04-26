@@ -27,6 +27,11 @@ export interface ResendVerificationResponse {
     message: string;
 }
 
+export interface UsernameAvailabilityResponse {
+    available: boolean;
+    message: string;
+}
+
 let authPublicKeyPromise: Promise<CryptoKey> | null = null;
 
 function isLocalHostname(hostname: string): boolean {
@@ -113,6 +118,13 @@ export const register = async (email: string, password: string, full_name?: stri
 
 export const resendVerificationEmail = async (email: string): Promise<ResendVerificationResponse> => {
     const { data } = await api.post("/auth/resend-verification", { email });
+    return data;
+};
+
+export const checkUsernameAvailability = async (username: string): Promise<UsernameAvailabilityResponse> => {
+    const { data } = await api.get("/users/check-username", {
+        params: { username },
+    });
     return data;
 };
 
