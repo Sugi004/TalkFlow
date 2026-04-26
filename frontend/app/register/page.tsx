@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getErrorMessage, register } from "@/lib/auth";
+import toast from "react-hot-toast";
 
 interface FormState {
     username: string;
@@ -106,12 +107,10 @@ export default function Register() {
                 form.password,
                 form.username.trim(),
             );
-            if (data.access_token) {
-                sessionStorage.setItem("token", data.access_token);
-                router.push("/login");
-            } else {
-                router.push("/login?registered=1");
-            }
+            toast.success(data.message);
+            window.setTimeout(() => {
+                router.push(`/verify-email?email=${encodeURIComponent(form.email.trim())}`);
+            }, 1200);
         } catch (error: unknown) {
             setErrors({ general: getErrorMessage(error, "Cannot reach server. Is the backend running?") });
         } finally {

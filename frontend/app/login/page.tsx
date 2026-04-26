@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { login, getErrorMessage } from "@/lib/auth";
 import { useAuth } from "@/context/AuthContext";
@@ -22,6 +22,7 @@ export default function Login() {
     const emailRef = useRef<HTMLInputElement>(null);
     const { login: authLogin } = useAuth();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const HEADER = "authenticate()";
 
     useEffect(() => {
@@ -44,6 +45,30 @@ export default function Login() {
         const t = setInterval(() => setCursor((c) => !c), 530);
         return () => clearInterval(t);
     }, []);
+
+    useEffect(() => {
+        const verification = searchParams.get("verification");
+        const verified = searchParams.get("verified");
+
+        if (verification === "sent") {
+            toast.success("Check your inbox and verify your email before logging in.");
+        } else if (verified === "1") {
+            toast.success("Email verified. You can sign in now.");
+        } else if (verified === "already") {
+            toast("Email already verified. You can sign in.", { icon: "i" });
+        } else if (verified === "invalid") {
+            toast.error("That verification link is invalid or expired.");
+        } else {
+            return;
+        }
+
+        if (typeof window !== "undefined") {
+            const next = new URL(window.location.href);
+            next.searchParams.delete("verification");
+            next.searchParams.delete("verified");
+            window.history.replaceState({}, "", next.toString());
+        }
+    }, [searchParams]);
 
     function validate() {
         const e: typeof errors = {};

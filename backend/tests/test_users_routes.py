@@ -21,6 +21,7 @@ class UsersRouteTests(unittest.IsolatedAsyncioTestCase):
             avatar_url="https://example.com/original.png",
         )
         db = SimpleNamespace(
+            execute=AsyncMock(return_value=FakeScalarResult(value=None)),
             add=Mock(),
             commit=AsyncMock(),
             refresh=AsyncMock(),
@@ -38,6 +39,33 @@ class UsersRouteTests(unittest.IsolatedAsyncioTestCase):
         db.add.assert_called_once_with(current_user)
         db.commit.assert_awaited_once()
         db.refresh.assert_awaited_once_with(current_user)
+
+    async def test_update_me_rejects_duplicate_username_case_insensitively(self):
+        current_user = SimpleNamespace(
+            id=1,
+            email="owner@example.com",
+            full_name="Owner",
+            avatar_url=None,
+        )
+        db = SimpleNamespace(
+            execute=AsyncMock(return_value=FakeScalarResult(value=SimpleNamespace(id=2, full_name="owner"))),
+            add=Mock(),
+            commit=AsyncMock(),
+            refresh=AsyncMock(),
+        )
+
+        with self.assertRaises(HTTPException) as context:
+            await update_me(
+                user_update=UserUpdate(full_name="OWNER"),
+                current_user=current_user,
+                db=db,
+            )
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertEqual(context.exception.detail, "Username is already taken")
+        db.add.assert_not_called()
+        db.commit.assert_not_awaited()
+        db.refresh.assert_not_awaited()
 
     async def test_search_users_rejects_short_queries(self):
         db = SimpleNamespace(execute=AsyncMock())

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from database import get_db
@@ -19,6 +20,17 @@ async def get_me(current_user: User = Depends(get_current_user)):
 @router.put("/me", response_model=UserResponse)
 async def update_me(user_update: UserUpdate, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     if user_update.full_name is not None:
+        existing_user = await db.execute(
+            select(User).where(
+                func.lower(User.full_name) == user_update.full_name.lower(),
+                User.id != current_user.id,
+            )
+        )
+        if existing_user.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username is already taken",
+            )
         current_user.full_name = user_update.full_name
     if user_update.avatar_url is not None:
         current_user.avatar_url = user_update.avatar_url

@@ -22,7 +22,10 @@ class UserCreate(BaseModel):
     @field_validator('full_name')
     @classmethod
     def validate_full_name(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None and len(v.strip()) < 2:
+        if v is None:
+            return v
+        v = v.strip()
+        if len(v) < 2:
             raise ValueError("Full name must be at least 2 characters long")
         return v
     
@@ -52,6 +55,26 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
+
+class RegisterResponse(BaseModel):
+    message: str
+    requires_email_verification: bool = True
+
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
+
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v):
+        if not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", v):
+            raise ValueError("Invalid email address")
+        return v.lower()
+
+
+class ResendVerificationResponse(BaseModel):
+    message: str
+
 # User Schemas
 
 class UserSearch(BaseModel):
@@ -79,6 +102,16 @@ class UserResponse(BaseModel):
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     avatar_url: Optional[str] = None
+
+    @field_validator('full_name')
+    @classmethod
+    def validate_full_name(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        v = v.strip()
+        if len(v) < 2:
+            raise ValueError("Full name must be at least 2 characters long")
+        return v
 
 
 

@@ -18,6 +18,15 @@ interface AuthPublicKeyResponse {
     algorithm: string;
 }
 
+export interface RegisterResponse {
+    message: string;
+    requires_email_verification: boolean;
+}
+
+export interface ResendVerificationResponse {
+    message: string;
+}
+
 let authPublicKeyPromise: Promise<CryptoKey> | null = null;
 
 function isLocalHostname(hostname: string): boolean {
@@ -91,7 +100,7 @@ export const login = async (email: string, password: string): Promise<Token> => 
     return data;
 };
 
-export const register = async (email: string, password: string, full_name?: string): Promise<Token> => {
+export const register = async (email: string, password: string, full_name?: string): Promise<RegisterResponse> => {
     const secret = await encryptPassword(password);
     const {data} = await api.post("/auth/register", {
         email,
@@ -99,6 +108,11 @@ export const register = async (email: string, password: string, full_name?: stri
         password_encrypted: secret.password_encrypted,
         full_name,
     });
+    return data;
+};
+
+export const resendVerificationEmail = async (email: string): Promise<ResendVerificationResponse> => {
+    const { data } = await api.post("/auth/resend-verification", { email });
     return data;
 };
 

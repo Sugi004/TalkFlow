@@ -1,19 +1,34 @@
+from datetime import datetime, timezone
+from urllib.parse import urlencode
+
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import RedirectResponse
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from database import get_db
 from dotenv import load_dotenv
 import os
 from models import User
-from schemas import Token, UserCreate, UserLogin  
+from schemas import (
+    RegisterResponse,
+    ResendVerificationRequest,
+    ResendVerificationResponse,
+    Token,
+    UserCreate,
+    UserLogin,
+)
 from backend_auth import (
     create_access_token,
+    create_email_verification_token,
+    decode_email_verification_token,
     decrypt_password_payload,
     get_password_public_key_pem,
     hash_password,
     verify_password,
     validate_password_strength,
 )
+from email_utils import send_verification_email
 
 
 
@@ -28,6 +43,35 @@ ALGORITHM = os.getenv("ALGORITHM")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+async def get_existing_user_by_username(
+    db: AsyncSession,
+    username: str,
+    *,
+    exclude_user_id: int | None = None,
+):
+    normalized_username = username.strip().lower()
+    query = select(User).where(func.lower(User.full_name) == normalized_username)
+    if exclude_user_id is not None:
+        query = query.where(User.id != exclude_user_id)
+
+    result = await db.execute(query)
+    return result.scalar_one_or_none()
+
+
+def get_frontend_url(path: str, **params: str) -> str:
+    frontend_base_url = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+    query = urlencode(params)
+    suffix = f"?{query}" if query else ""
+    return f"{frontend_base_url}{path}{suffix}"
+
+
+def build_verification_url(request: Request, token: str) -> str:
+    backend_base_url = os.getenv("BACKEND_PUBLIC_URL", "").strip().rstrip("/")
+    if not backend_base_url:
+        backend_base_url = str(request.base_url).rstrip("/")
+    return f"{backend_base_url}/auth/verify-email?token={token}"
 
 
 def resolve_password(password: str, password_encrypted: bool) -> str:
@@ -50,7 +94,7 @@ async def auth_public_key():
         "algorithm": "RSA-OAEP-256",
     }
 
-@router.post("/register", response_model=Token)
+@router.post("/register", response_model=RegisterResponse)
 @limiter.limit("5/minute")
 async def register(request: Request,user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == user_data.email))
@@ -60,6 +104,13 @@ async def register(request: Request,user_data: UserCreate, db: AsyncSession = De
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
         )
+    if user_data.full_name:
+        existing_username = await get_existing_user_by_username(db, user_data.full_name)
+        if existing_username:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username is already taken"
+            )
     password = resolve_password(user_data.password, user_data.password_encrypted)
     try:
         validate_password_strength(password)
@@ -73,16 +124,55 @@ async def register(request: Request,user_data: UserCreate, db: AsyncSession = De
     new_user = User(
         email=user_data.email,
         hashed_password=hashed_password,
+        is_email_verified=False,
         full_name=user_data.full_name,
         avatar_url=user_data.avatar_url
     )
     db.add(new_user)
     await db.commit()
-    await db.refresh(new_user)  
-    access_token = create_access_token(
-        data={"sub": new_user.email},
+    await db.refresh(new_user)
+
+    verification_token = create_email_verification_token(new_user.email)
+    verification_url = build_verification_url(request, verification_token)
+    await send_verification_email(
+        recipient_email=new_user.email,
+        recipient_name=new_user.full_name,
+        verification_url=verification_url,
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {
+        "message": "Verification email sent. Please verify your email before logging in.",
+        "requires_email_verification": True,
+    }
+
+
+@router.post("/resend-verification", response_model=ResendVerificationResponse)
+@limiter.limit("3/minute")
+async def resend_verification_email(
+    request: Request,
+    payload: ResendVerificationRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.email == payload.email))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found for that email.",
+        )
+    if user.is_email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This email is already verified.",
+        )
+
+    verification_token = create_email_verification_token(user.email)
+    verification_url = build_verification_url(request, verification_token)
+    await send_verification_email(
+        recipient_email=user.email,
+        recipient_name=user.full_name,
+        verification_url=verification_url,
+    )
+    return {"message": "Verification email sent again. Please check your inbox."}
 
 @router.post("/login", response_model=Token)
 @limiter.limit("10/minute")
@@ -95,6 +185,11 @@ async def login(request: Request, user_data: UserLogin, db: AsyncSession = Depen
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not user.is_email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please verify your email before logging in.",
         )
     access_token = create_access_token(
         data={"sub": user.email},
@@ -110,5 +205,44 @@ async def token(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password"
         )
+    if not user.is_email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please verify your email before logging in.",
+        )
     access_token = create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.get("/verify-email")
+async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
+    try:
+        email = decode_email_verification_token(token)
+    except ValueError:
+        return RedirectResponse(
+            get_frontend_url("/email-verified", status="invalid"),
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if user is None:
+        return RedirectResponse(
+            get_frontend_url("/email-verified", status="invalid"),
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    if user.is_email_verified:
+        return RedirectResponse(
+            get_frontend_url("/email-verified", status="already"),
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    user.is_email_verified = True
+    user.email_verified_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    return RedirectResponse(
+        get_frontend_url("/email-verified", status="success"),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )

@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, Enum
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, text
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 import enum
@@ -20,6 +20,8 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
+    is_email_verified = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+    email_verified_at = Column(DateTime(timezone=True), nullable=True)
     full_name = Column(String, nullable=True)
     avatar_url = Column(String, nullable=True)
     last_seen = Column(DateTime(timezone=True), nullable=True, server_default=func.now())
@@ -78,5 +80,3 @@ class Message(Base):
     
     conversation = relationship("Conversation", back_populates="messages")
     sender = relationship("User", back_populates="messages")
-
-

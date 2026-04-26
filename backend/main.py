@@ -6,6 +6,8 @@ from slowapi.errors import RateLimitExceeded
 from dotenv import load_dotenv
 import os
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
+
 from database import engine
 from models import Base
 from routers import auth, conversation, messages, users, websocket, uploads, ai
@@ -53,6 +55,7 @@ extra_frontend_origin = os.getenv("FRONTEND_URL")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "http://localhost:3001",
         "http://localhost:5173",
         "http://localhost:3000",
         "http://localhost:8000",
@@ -93,6 +96,49 @@ async def global_exception_handler(request, exc: Exception):
 async def create_tables():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        if engine.dialect.name == "postgresql":
+            await conn.execute(
+                text(
+                    """
+                    ALTER TABLE users
+                    ADD COLUMN IF NOT EXISTS is_email_verified BOOLEAN
+                    """
+                )
+            )
+            await conn.execute(
+                text(
+                    """
+                    ALTER TABLE users
+                    ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ NULL
+                    """
+                )
+            )
+            await conn.execute(
+                text(
+                    """
+                    UPDATE users
+                    SET is_email_verified = TRUE,
+                        email_verified_at = COALESCE(email_verified_at, created_at)
+                    WHERE is_email_verified IS NULL
+                    """
+                )
+            )
+            await conn.execute(
+                text(
+                    """
+                    ALTER TABLE users
+                    ALTER COLUMN is_email_verified SET DEFAULT FALSE
+                    """
+                )
+            )
+            await conn.execute(
+                text(
+                    """
+                    ALTER TABLE users
+                    ALTER COLUMN is_email_verified SET NOT NULL
+                    """
+                )
+            )
 
 
 #  Health Check
@@ -100,5 +146,3 @@ async def create_tables():
 @app.get("/")
 async def root():
     return {"message": "TalkFlow API is running"}
-
-

@@ -27,6 +27,7 @@ filelock==3.29.0
 fsspec==2026.3.0
 functions==0.7.0
 generativeai==0.0.1
+gevent==26.4.0
 google-ai-generativelanguage==0.6.15
 google-api-core==2.25.2
 google-api-python-client==2.193.0
@@ -95,6 +96,7 @@ pyzmq==27.1.0
 redis==7.4.0
 requests==2.32.5
 requests-oauthlib==2.0.0
+resend==2.29.0
 rich==15.0.0
 rsa==4.9.1
 s3transfer==0.16.0
@@ -116,6 +118,9 @@ typing_extensions==4.15.0
 uritemplate==4.2.0
 urllib3==2.6.3
 uvicorn==0.44.0
-websockets==15.0.1
 wcwidth==0.2.14
+websocket==0.2.1
+websockets==15.0.1
 wrapt==2.1.2
+zope.event==6.1
+zope.interface==8.3

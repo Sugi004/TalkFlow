@@ -20,6 +20,7 @@ load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
+EMAIL_VERIFICATION_EXPIRE_HOURS = int(os.getenv("EMAIL_VERIFICATION_EXPIRE_HOURS", 24))
 
 PASSWORD_ENCRYPTION_PUBLIC_KEY = os.getenv("PASSWORD_ENCRYPTION_PUBLIC_KEY")
 PASSWORD_ENCRYPTION_PRIVATE_KEY = os.getenv("PASSWORD_ENCRYPTION_PRIVATE_KEY")
@@ -126,6 +127,31 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def create_email_verification_token(email: str, expires_delta: Optional[timedelta] = None) -> str:
+    to_encode = {
+        "sub": email,
+        "purpose": "verify_email",
+        "exp": datetime.utcnow() + (expires_delta or timedelta(hours=EMAIL_VERIFICATION_EXPIRE_HOURS)),
+    }
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_email_verification_token(token: str) -> str:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError as exc:
+        raise ValueError("Invalid or expired verification link") from exc
+
+    if payload.get("purpose") != "verify_email":
+        raise ValueError("Invalid or expired verification link")
+
+    email = payload.get("sub")
+    if not email:
+        raise ValueError("Invalid or expired verification link")
+
+    return email
 
 
 #  Get current user
