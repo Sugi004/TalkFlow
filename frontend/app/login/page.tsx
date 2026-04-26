@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -9,7 +9,7 @@ import { useAuth } from "@/context/AuthContext";
 import toast from "react-hot-toast";
 import { AuthBackground } from "@/components/ui/AuthBackground";
 
-export default function Login() {
+function LoginContent() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
@@ -274,5 +274,13 @@ export default function Login() {
         @keyframes fadeUp  { from { opacity:0 } to   { opacity:1 } }
       `}</style>
         </div>
+    );
+}
+
+export default function Login() {
+    return (
+        <Suspense fallback={<main className="min-h-screen bg-[#071018]" />}>
+            <LoginContent />
+        </Suspense>
     );
 }

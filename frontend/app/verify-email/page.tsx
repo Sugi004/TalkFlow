@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import { AuthBackground } from "@/components/ui/AuthBackground";
 import { resendVerificationEmail, getErrorMessage } from "@/lib/auth";
 
-export default function VerifyEmailPage() {
+function VerifyEmailContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const email = searchParams.get("email") ?? "";
@@ -87,5 +87,13 @@ export default function VerifyEmailPage() {
                 </div>
             </div>
         </main>
+    );
+}
+
+export default function VerifyEmailPage() {
+    return (
+        <Suspense fallback={<main className="min-h-screen bg-[#071018]" />}>
+            <VerifyEmailContent />
+        </Suspense>
     );
 }

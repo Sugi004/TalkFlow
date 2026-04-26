@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AuthBackground } from "@/components/ui/AuthBackground";
@@ -23,7 +23,7 @@ const STATUS_COPY: Record<string, { eyebrow: string; title: string; detail: stri
     },
 };
 
-export default function EmailVerifiedPage() {
+function EmailVerifiedContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const status = searchParams.get("status") ?? "success";
@@ -82,5 +82,13 @@ export default function EmailVerifiedPage() {
                 </div>
             </div>
         </main>
+    );
+}
+
+export default function EmailVerifiedPage() {
+    return (
+        <Suspense fallback={<main className="min-h-screen bg-[#071018]" />}>
+            <EmailVerifiedContent />
+        </Suspense>
     );
 }
