@@ -38,9 +38,11 @@ async def check_username(username: str = Query(...), db: AsyncSession = Depends(
         return {"available": False, "message": message}
 
     result = await db.execute(
-        select(User).where(func.lower(User.full_name) == message.lower())
+        select(User)
+        .where(func.lower(User.full_name) == message.lower())
+        .limit(1)
     )
-    user = result.scalar_one_or_none()
+    user = result.scalars().first()
     if user is not None:
         return {"available": False, "message": "Username is already taken"}
 
@@ -54,9 +56,9 @@ async def update_me(user_update: UserUpdate, current_user: User = Depends(get_cu
             select(User).where(
                 func.lower(User.full_name) == user_update.full_name.lower(),
                 User.id != current_user.id,
-            )
+            ).limit(1)
         )
-        if existing_user.scalar_one_or_none():
+        if existing_user.scalars().first():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Username is already taken",

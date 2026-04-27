@@ -67,6 +67,30 @@ class AuthRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(context.exception.status_code, 400)
         self.assertEqual(context.exception.detail, "Username is already taken")
 
+    async def test_register_rejects_duplicate_username_when_multiple_rows_exist(self):
+        user_data = UserCreate(
+            email="owner@example.com",
+            password="StrongPass1!",
+            full_name="Owner",
+        )
+        db = SimpleNamespace(
+            execute=AsyncMock(
+                side_effect=[
+                    FakeScalarResult(value=None),
+                    FakeScalarResult(values=[
+                        SimpleNamespace(id=7, full_name="owner"),
+                        SimpleNamespace(id=8, full_name="OWNER"),
+                    ]),
+                ]
+            ),
+        )
+
+        with self.assertRaises(HTTPException) as context:
+            await register(request=create_mock_request(), user_data=user_data, db=db)
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertEqual(context.exception.detail, "Username is already taken")
+
     async def test_register_hashes_password_and_returns_verification_response(self):
         user_data = UserCreate(
             email="owner@example.com",

@@ -50,9 +50,11 @@ USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9_]+$")
 
 async def get_existing_user_by_username(db: AsyncSession, username: str):
     result = await db.execute(
-        select(User).where(func.lower(User.full_name) == username.strip().lower())
+        select(User)
+        .where(func.lower(User.full_name) == username.strip().lower())
+        .limit(1)
     )
-    return result.scalar_one_or_none()
+    return result.scalars().first()
 
 
 def validate_registration_username(username: str | None) -> str | None:

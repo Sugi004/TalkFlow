@@ -33,6 +33,23 @@ class UsersRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response, {"available": False, "message": "Username is already taken"})
         db.execute.assert_awaited_once()
 
+    async def test_check_username_returns_taken_when_multiple_duplicate_rows_exist(self):
+        db = SimpleNamespace(
+            execute=AsyncMock(
+                return_value=FakeScalarResult(
+                    values=[
+                        SimpleNamespace(id=2, full_name="unique_handle"),
+                        SimpleNamespace(id=3, full_name="Unique_Handle"),
+                    ]
+                )
+            ),
+        )
+
+        response = await check_username(username="Unique_Handle", db=db)
+
+        self.assertEqual(response, {"available": False, "message": "Username is already taken"})
+        db.execute.assert_awaited_once()
+
     async def test_check_username_returns_validation_message_for_invalid_username(self):
         db = SimpleNamespace(
             execute=AsyncMock(),
