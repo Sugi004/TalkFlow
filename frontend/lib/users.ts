@@ -16,6 +16,11 @@ export const deleteMyAvatar = async (): Promise<User> => {
     return data;
 }
 
+export const deleteMyAccount = async (): Promise<{ message: string }> => {
+    const { data } = await api.delete("/users/me");
+    return data;
+}
+
 export const searchUsers = async (q: string): Promise<User[]> => {
     const {data} = await api.get("/users/search", {params: {q}});
     return data;

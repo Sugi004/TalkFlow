@@ -90,6 +90,9 @@ class UsernameAvailabilityResponse(BaseModel):
     available: bool
     message: str
 
+class DeleteAccountResponse(BaseModel):
+    message: str
+
 class UserResponse(BaseModel):
     id: int
     email: EmailStr

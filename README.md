@@ -14,6 +14,7 @@ TalkFlow is a full-stack real-time chat application built as a portfolio-ready p
 - Supports presigned S3 uploads for images, videos, files, and source-code attachments
 - Provides AI-powered conversation summaries, smart replies, and translation
 - Includes a responsive Next.js frontend for login, chat, registration, and profile management
+- Lets users permanently delete their own account and associated messages from the profile page after an explicit warning
 
 ## Repository Layout
 
@@ -118,6 +119,7 @@ This project is not end-to-end encrypted today. The backend decrypts message con
 
 - `GET /users/me`
 - `PUT /users/me`
+- `DELETE /users/me`
 - `DELETE /users/me/avatar`
 - `GET /users/search?q=...`
 
@@ -191,6 +193,7 @@ This project is not end-to-end encrypted today. The backend decrypts message con
 
 - `frontend/app/` contains route-level pages and layout files
 - `frontend/app/verify-email` and `frontend/app/email-verified` cover the verification flow after registration and after the email link is opened
+- `frontend/app/profile` handles username editing, avatar management, and self-service account deletion with an irreversible warning modal
 - `frontend/components/chat/` contains the main chat presentation components
 - `frontend/context/AuthContext.tsx` manages client auth state
 - `frontend/hooks/useWebSocket.ts` manages per-conversation realtime sockets

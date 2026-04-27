@@ -1,12 +1,12 @@
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
-from sqlalchemy import func
+from sqlalchemy import delete, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from database import get_db
-from models import User
-from schemas import UserResponse, UserSearch, UserUpdate, UsernameAvailabilityResponse
+from models import Conversation, Message, Participants, User
+from schemas import DeleteAccountResponse, UserResponse, UserSearch, UserUpdate, UsernameAvailabilityResponse
 from backend_auth import get_current_user
 from limiter import limiter
 
@@ -78,6 +78,48 @@ async def delete_my_avatar(current_user: User = Depends(get_current_user), db: A
     await db.commit()
     await db.refresh(current_user)
     return current_user
+
+
+@router.delete("/me", response_model=DeleteAccountResponse)
+async def delete_my_account(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    created_conversation_ids_result = await db.execute(
+        select(Conversation.id).where(Conversation.created_by == current_user.id)
+    )
+    created_conversation_ids = created_conversation_ids_result.scalars().all()
+
+    if created_conversation_ids:
+        await db.execute(
+            delete(Message).where(
+                or_(
+                    Message.sender_id == current_user.id,
+                    Message.conversation_id.in_(created_conversation_ids),
+                )
+            )
+        )
+        await db.execute(
+            delete(Participants).where(
+                or_(
+                    Participants.user_id == current_user.id,
+                    Participants.conversation_id.in_(created_conversation_ids),
+                )
+            )
+        )
+        await db.execute(
+            delete(Conversation).where(Conversation.id.in_(created_conversation_ids))
+        )
+    else:
+        await db.execute(delete(Message).where(Message.sender_id == current_user.id))
+        await db.execute(delete(Participants).where(Participants.user_id == current_user.id))
+
+    await db.execute(delete(User).where(User.id == current_user.id))
+    await db.commit()
+
+    return {
+        "message": "Your account and associated messages have been permanently deleted."
+    }
 
 #  Search User
 

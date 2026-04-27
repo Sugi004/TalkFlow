@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, ChangeEvent } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/context/AuthContext"
-import { deleteMyAvatar, getMe, updateMe } from "@/lib/users"
+import { deleteMyAccount, deleteMyAvatar, getMe, updateMe } from "@/lib/users"
 import { User } from "@/types/index"
 import toast from "react-hot-toast"
 import { getAvatarColor, getInitials } from "@/lib/utils"
@@ -33,6 +33,7 @@ export default function ProfilePage() {
     const [uploading, setUploading] = useState(false)
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
+    const [deletingAccount, setDeletingAccount] = useState(false)
     const [uploadPct, setUploadPct] = useState(0)
     const [mounted, setMounted] = useState(false)
     const [showAvatarViewer, setShowAvatarViewer] = useState(false)
@@ -43,6 +44,7 @@ export default function ProfilePage() {
     const [editorOffsetY, setEditorOffsetY] = useState(0)
     const [editorImageSize, setEditorImageSize] = useState<{ width: number; height: number } | null>(null)
     const [editorSize, setEditorSize] = useState(AVATAR_EDITOR_SIZE)
+    const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false)
 
     const fileInputRef = useRef<HTMLInputElement>(null)
     const editorImageRef = useRef<HTMLImageElement>(null)
@@ -104,6 +106,21 @@ export default function ProfilePage() {
     function handleBackToChat() {
         refreshUser()
         window.location.assign("/chat")
+    }
+
+    async function handleDeleteAccount() {
+        setDeletingAccount(true)
+        try {
+            const response = await deleteMyAccount()
+            logout()
+            toast.success(response.message)
+            window.location.assign("/login")
+        } catch (error: unknown) {
+            toast.error(getErrorMessage(error, "Failed to delete account"))
+        } finally {
+            setDeletingAccount(false)
+            setShowDeleteAccountModal(false)
+        }
     }
 
     useEffect(() => {
@@ -461,6 +478,22 @@ export default function ProfilePage() {
                                             </span>
                                         ) : "Save Changes →"}
                                     </button>
+
+                                    <div className="mt-6 rounded-2xl border border-[#3a2029] bg-[#130c10] p-4">
+                                        <p className="text-[11px] font-mono uppercase tracking-[.14em] text-[#ff7b93]">
+                                            Delete Account
+                                        </p>
+                                        <p className="mt-2 text-[12px] text-[#c08a96]">
+                                            Deleting your account permanently removes your profile and messages. This cannot be undone.
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowDeleteAccountModal(true)}
+                                            className="mt-4 rounded-full border border-[#7b3040] px-4 py-2 text-[12px] font-mono uppercase tracking-[.12em] text-[#ff7b93] transition hover:border-[#ff4d6d] hover:text-[#ff4d6d]"
+                                        >
+                                            Delete Account
+                                        </button>
+                                    </div>
                                 </div>
                             </>
                         ) : null}
@@ -652,6 +685,41 @@ export default function ProfilePage() {
                                     </button>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showDeleteAccountModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+                    <div className="w-full max-w-md rounded-3xl border border-[#3a2029] bg-[#0d1117] p-6 shadow-2xl">
+                        <p className="text-[11px] font-mono uppercase tracking-[.16em] text-[#ff7b93]">
+                            Permanent Action
+                        </p>
+                        <h2 className="mt-3 text-[22px] font-bold text-[#f3f7fb]">
+                            Delete your account?
+                        </h2>
+                        <p className="mt-3 text-[13px] leading-6 text-[#c08a96]">
+                            Your profile, messages, and conversations created by this account will be permanently deleted and cannot be regained.
+                        </p>
+
+                        <div className="mt-6 flex flex-wrap gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowDeleteAccountModal(false)}
+                                disabled={deletingAccount}
+                                className="rounded-full border border-[#1e2a35] px-4 py-2 text-[12px] text-[#c9d8e8] font-mono transition-colors hover:bg-[#1a2530] disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleDeleteAccount}
+                                disabled={deletingAccount}
+                                className="rounded-full bg-[#ff4d6d] px-4 py-2 text-[12px] font-bold uppercase tracking-[.12em] text-white disabled:opacity-50"
+                            >
+                                {deletingAccount ? "Deleting…" : "Yes, Delete"}
+                            </button>
                         </div>
                     </div>
                 </div>

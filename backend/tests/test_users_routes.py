@@ -8,11 +8,43 @@ from support import FakeScalarResult, ensure_backend_test_env
 ensure_backend_test_env()
 
 from fastapi import HTTPException
-from routers.users import check_username, search_users, update_me
+from routers.users import check_username, delete_my_account, search_users, update_me
 from schemas import UserUpdate
 
 
 class UsersRouteTests(unittest.IsolatedAsyncioTestCase):
+    async def test_delete_my_account_removes_created_conversations_and_user(self):
+        current_user = SimpleNamespace(id=1, email="owner@example.com")
+        db = SimpleNamespace(
+            execute=AsyncMock(return_value=FakeScalarResult(values=[62, 63])),
+            commit=AsyncMock(),
+        )
+
+        response = await delete_my_account(current_user=current_user, db=db)
+
+        self.assertEqual(
+            response,
+            {"message": "Your account and associated messages have been permanently deleted."},
+        )
+        self.assertEqual(db.execute.await_count, 5)
+        db.commit.assert_awaited_once()
+
+    async def test_delete_my_account_removes_only_user_rows_when_no_created_conversations(self):
+        current_user = SimpleNamespace(id=1, email="owner@example.com")
+        db = SimpleNamespace(
+            execute=AsyncMock(return_value=FakeScalarResult(values=[])),
+            commit=AsyncMock(),
+        )
+
+        response = await delete_my_account(current_user=current_user, db=db)
+
+        self.assertEqual(
+            response,
+            {"message": "Your account and associated messages have been permanently deleted."},
+        )
+        self.assertEqual(db.execute.await_count, 4)
+        db.commit.assert_awaited_once()
+
     async def test_check_username_returns_available_for_unused_username(self):
         db = SimpleNamespace(
             execute=AsyncMock(return_value=FakeScalarResult(value=None)),
