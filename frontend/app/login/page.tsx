@@ -123,15 +123,16 @@ function LoginContent() {
 
                     {/* Logo */}
                     <div className="mb-8 flex items-center gap-5">
-                        <div className="grid h-[114px] w-[132px] shrink-0 place-items-center rounded-[30px] border border-cyan-300/15 bg-[#0a1520] p-3 shadow-[0_0_32px_rgba(0,204,255,.1)]">
+                        <div className="grid h-[100px] w-[100px] shrink-0 place-items-center rounded-[30px] border border-cyan-300/15 bg-[#0a1520] p-3 shadow-[0_0_32px_rgba(0,204,255,.1)]">
                             <div className="grid h-full w-full place-items-center rounded-[22px] bg-white/98 px-2 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,.35)]">
                                 <Image
                                     src="/android-chrome-192x192.png"
                                     alt="TalkFlow"
-                                    width={102}
-                                    height={78}
+                                    unoptimized
+                                    width={120}
+                                    height={120}
                                     priority
-                                    className="block h-[78px] w-[102px] object-contain object-center"
+                                    className="block h-auto w-auto object-contain object-center"
                                 />
                             </div>
                         </div>

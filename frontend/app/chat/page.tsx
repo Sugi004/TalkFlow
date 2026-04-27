@@ -194,7 +194,7 @@ export default function ChatPage() {
 
     return (
         <>
-            <div className="flex h-dvh min-h-[100dvh] bg-[#080c10] overflow-hidden">
+            <div className="flex h-dvh min-h-dvh bg-[#080c10] overflow-hidden">
 
                 {/* Sidebar toggle for mobile */}
                 {!sidebarOpen && !activeConv && (

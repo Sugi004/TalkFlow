@@ -289,7 +289,7 @@ export default function ProfilePage() {
 
     return (
         <>
-            <div className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden bg-[#080c10] px-4 py-6 font-mono sm:min-h-screen sm:py-10">
+            <div className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-[#080c10] px-4 py-6 font-mono sm:min-h-screen sm:py-10">
                 {/* Grid */}
                 <div
                     className="fixed inset-0 pointer-events-none"
