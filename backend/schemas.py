@@ -72,6 +72,31 @@ class ResendVerificationRequest(BaseModel):
         return v.lower()
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v):
+        if not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", v):
+            raise ValueError("Invalid email address")
+        return v.lower()
+
+
+class ForgotPasswordResponse(BaseModel):
+    message: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    password_encrypted: bool = False
+    password: str
+
+
+class ResetPasswordResponse(BaseModel):
+    message: str
+
+
 class ResendVerificationResponse(BaseModel):
     message: str
 

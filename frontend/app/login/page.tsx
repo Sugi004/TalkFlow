@@ -20,6 +20,7 @@ function LoginContent() {
     const [cursor, setCursor] = useState(true);
 
     const emailRef = useRef<HTMLInputElement>(null);
+    const handledToastKeyRef = useRef<string | null>(null);
     const { login: authLogin } = useAuth();
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -49,6 +50,18 @@ function LoginContent() {
     useEffect(() => {
         const verification = searchParams.get("verification");
         const verified = searchParams.get("verified");
+        const reset = searchParams.get("reset");
+        const toastKey = verification
+            ? `verification:${verification}`
+            : verified
+              ? `verified:${verified}`
+              : reset
+                ? `reset:${reset}`
+                : null;
+
+        if (!toastKey) return;
+        if (handledToastKeyRef.current === toastKey) return;
+        handledToastKeyRef.current = toastKey;
 
         if (verification === "sent") {
             toast.success("Check your inbox and verify your email before logging in.");
@@ -58,14 +71,15 @@ function LoginContent() {
             toast("Email already verified. You can sign in.", { icon: "i" });
         } else if (verified === "invalid") {
             toast.error("That verification link is invalid or expired.");
-        } else {
-            return;
+        } else if (reset === "success") {
+            toast.success("Password reset complete. You can sign in now.");
         }
 
         if (typeof window !== "undefined") {
             const next = new URL(window.location.href);
             next.searchParams.delete("verification");
             next.searchParams.delete("verified");
+            next.searchParams.delete("reset");
             window.history.replaceState({}, "", next.toString());
         }
     }, [searchParams]);

@@ -1,4 +1,5 @@
 import unittest
+from itertools import count
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 from starlette.requests import Request
@@ -11,20 +12,26 @@ from fastapi import HTTPException
 from schemas import UserCreate, UserLogin
 from routers.auth import (
     auth_public_key,
+    forgot_password,
     login,
     register,
     resend_verification_email,
+    reset_password,
     token,
     verify_email,
 )
 
 
+_request_counter = count(1)
+
+
 def create_mock_request():
+    client_octet = next(_request_counter)
     scope = {
         "type": "http",
         "method": "POST",
         "path": "/test-path",
-        "client": ("127.0.0.1", 123),
+        "client": (f"127.0.0.{client_octet}", 123),
         "headers": [],
     }
     return Request(scope)
@@ -229,6 +236,104 @@ class AuthRouteTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response, {"message": "Verification email sent again. Please check your inbox."})
         send_email.assert_awaited_once()
+
+    async def test_forgot_password_sends_reset_email_when_user_exists(self):
+        stored_user = SimpleNamespace(
+            email="owner@example.com",
+            full_name="Owner",
+        )
+        db = SimpleNamespace(
+            execute=AsyncMock(return_value=FakeScalarResult(value=stored_user)),
+        )
+        payload = SimpleNamespace(email="owner@example.com")
+
+        with (
+            patch("routers.auth.create_password_reset_token", return_value="reset-token"),
+            patch("routers.auth.send_password_reset_email", new=AsyncMock()) as send_email,
+        ):
+            response = await forgot_password(
+                request=create_mock_request(),
+                payload=payload,
+                db=db,
+            )
+
+        self.assertEqual(
+            response,
+            {"message": "Password reset link sent. Please check your inbox."},
+        )
+        send_email.assert_awaited_once()
+
+    async def test_forgot_password_rejects_unknown_email(self):
+        db = SimpleNamespace(
+            execute=AsyncMock(return_value=FakeScalarResult(value=None)),
+        )
+        payload = SimpleNamespace(email="missing@example.com")
+
+        with patch("routers.auth.send_password_reset_email", new=AsyncMock()) as send_email:
+            with self.assertRaises(HTTPException) as context:
+                await forgot_password(
+                    request=create_mock_request(),
+                    payload=payload,
+                    db=db,
+                )
+
+        self.assertEqual(context.exception.status_code, 404)
+        self.assertEqual(context.exception.detail, "Email not found or not registered")
+        send_email.assert_not_awaited()
+
+    async def test_reset_password_updates_hashed_password(self):
+        stored_user = SimpleNamespace(
+            email="owner@example.com",
+            hashed_password="old-hash",
+        )
+        db = SimpleNamespace(
+            execute=AsyncMock(return_value=FakeScalarResult(value=stored_user)),
+            commit=AsyncMock(),
+        )
+        payload = SimpleNamespace(
+            token="reset-token",
+            password="StrongPass1!",
+            password_encrypted=False,
+        )
+
+        with (
+            patch("routers.auth.decode_password_reset_token", return_value="owner@example.com"),
+            patch("routers.auth.hash_password", return_value="new-hash"),
+        ):
+            response = await reset_password(
+                request=create_mock_request(),
+                payload=payload,
+                db=db,
+            )
+
+        self.assertEqual(response, {"message": "Your password has been reset. You can sign in now."})
+        self.assertEqual(stored_user.hashed_password, "new-hash")
+        db.commit.assert_awaited_once()
+
+    async def test_reset_password_rejects_invalid_token(self):
+        db = SimpleNamespace(
+            execute=AsyncMock(),
+            commit=AsyncMock(),
+        )
+        payload = SimpleNamespace(
+            token="bad-token",
+            password="StrongPass1!",
+            password_encrypted=False,
+        )
+
+        with (
+            patch("routers.auth.decode_password_reset_token", side_effect=ValueError("Invalid or expired password reset link")),
+        ):
+            with self.assertRaises(HTTPException) as context:
+                await reset_password(
+                    request=create_mock_request(),
+                    payload=payload,
+                    db=db,
+                )
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertEqual(context.exception.detail, "Invalid or expired password reset link")
+        db.execute.assert_not_called()
 
     async def test_token_returns_bearer_token_for_valid_form_credentials(self):
         stored_user = SimpleNamespace(

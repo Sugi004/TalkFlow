@@ -21,6 +21,7 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 EMAIL_VERIFICATION_EXPIRE_HOURS = int(os.getenv("EMAIL_VERIFICATION_EXPIRE_HOURS", 24))
+RESET_PASSWORD_EXPIRE_MINUTES = int(os.getenv("RESET_PASSWORD_EXPIRE_MINUTES", 10))
 
 PASSWORD_ENCRYPTION_PUBLIC_KEY = os.getenv("PASSWORD_ENCRYPTION_PUBLIC_KEY")
 PASSWORD_ENCRYPTION_PRIVATE_KEY = os.getenv("PASSWORD_ENCRYPTION_PRIVATE_KEY")
@@ -150,6 +151,31 @@ def decode_email_verification_token(token: str) -> str:
     email = payload.get("sub")
     if not email:
         raise ValueError("Invalid or expired verification link")
+
+    return email
+
+
+def create_password_reset_token(email: str, expires_delta: Optional[timedelta] = None) -> str:
+    to_encode = {
+        "sub": email,
+        "purpose": "reset_password",
+        "exp": datetime.utcnow() + (expires_delta or timedelta(minutes=RESET_PASSWORD_EXPIRE_MINUTES)),
+    }
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_password_reset_token(token: str) -> str:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError as exc:
+        raise ValueError("Invalid or expired password reset link") from exc
+
+    if payload.get("purpose") != "reset_password":
+        raise ValueError("Invalid or expired password reset link")
+
+    email = payload.get("sub")
+    if not email:
+        raise ValueError("Invalid or expired password reset link")
 
     return email
 

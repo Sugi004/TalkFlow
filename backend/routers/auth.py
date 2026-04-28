@@ -12,7 +12,11 @@ from dotenv import load_dotenv
 import os
 from models import User
 from schemas import (
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
     RegisterResponse,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
     ResendVerificationRequest,
     ResendVerificationResponse,
     Token,
@@ -22,6 +26,8 @@ from schemas import (
 from backend_auth import (
     create_access_token,
     create_email_verification_token,
+    create_password_reset_token,
+    decode_password_reset_token,
     decode_email_verification_token,
     decrypt_password_payload,
     get_password_public_key_pem,
@@ -29,7 +35,7 @@ from backend_auth import (
     verify_password,
     validate_password_strength,
 )
-from email_utils import send_verification_email
+from email_utils import send_password_reset_email, send_verification_email
 
 
 
@@ -89,6 +95,10 @@ def build_verification_url(request: Request, token: str) -> str:
     if not backend_base_url:
         backend_base_url = str(request.base_url).rstrip("/")
     return f"{backend_base_url}/auth/verify-email?token={token}"
+
+
+def build_password_reset_url(token: str) -> str:
+    return get_frontend_url("/reset-password", token=token)
 
 
 def resolve_password(password: str, password_encrypted: bool) -> str:
@@ -191,6 +201,73 @@ async def resend_verification_email(
         verification_url=verification_url,
     )
     return {"message": "Verification email sent again. Please check your inbox."}
+
+
+@router.post("/forgot-password", response_model=ForgotPasswordResponse)
+@limiter.limit("3/minute")
+async def forgot_password(
+    request: Request,
+    payload: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.email == payload.email))
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Email not found or not registered",
+        )
+
+    reset_token = create_password_reset_token(user.email)
+    reset_url = build_password_reset_url(reset_token)
+    await send_password_reset_email(
+        recipient_email=user.email,
+        recipient_name=user.full_name,
+        reset_url=reset_url,
+    )
+
+    return {
+        "message": "Password reset link sent. Please check your inbox.",
+    }
+
+
+@router.post("/reset-password", response_model=ResetPasswordResponse)
+@limiter.limit("5/minute")
+async def reset_password(
+    request: Request,
+    payload: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        email = decode_password_reset_token(payload.token)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired password reset link",
+        )
+
+    password = resolve_password(payload.password, payload.password_encrypted)
+    try:
+        validate_password_strength(password)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+    user.hashed_password = hash_password(password)
+    await db.commit()
+
+    return {"message": "Your password has been reset. You can sign in now."}
 
 @router.post("/login", response_model=Token)
 @limiter.limit("10/minute")

@@ -32,6 +32,14 @@ export interface UsernameAvailabilityResponse {
     message: string;
 }
 
+export interface ForgotPasswordResponse {
+    message: string;
+}
+
+export interface ResetPasswordResponse {
+    message: string;
+}
+
 let authPublicKeyPromise: Promise<CryptoKey> | null = null;
 
 function isLocalHostname(hostname: string): boolean {
@@ -118,6 +126,21 @@ export const register = async (email: string, password: string, full_name?: stri
 
 export const resendVerificationEmail = async (email: string): Promise<ResendVerificationResponse> => {
     const { data } = await api.post("/auth/resend-verification", { email });
+    return data;
+};
+
+export const forgotPassword = async (email: string): Promise<ForgotPasswordResponse> => {
+    const { data } = await api.post("/auth/forgot-password", { email });
+    return data;
+};
+
+export const resetPassword = async (token: string, password: string): Promise<ResetPasswordResponse> => {
+    const secret = await encryptPassword(password);
+    const { data } = await api.post("/auth/reset-password", {
+        token,
+        password: secret.password,
+        password_encrypted: secret.password_encrypted,
+    });
     return data;
 };
 

@@ -116,6 +116,11 @@ def _log_local_verification_link(recipient_email: str, verification_url: str, re
     print(f"LOCAL EMAIL VERIFICATION FOR {recipient_email}: {verification_url}{suffix}")
 
 
+def _log_local_password_reset_link(recipient_email: str, reset_url: str, reason: str | None = None) -> None:
+    suffix = f" ({reason})" if reason else ""
+    print(f"LOCAL PASSWORD RESET FOR {recipient_email}: {reset_url}{suffix}")
+
+
 
 def _send_message_sync(settings: EmailSettings, message: EmailMessage) -> None:
     if not settings.smtp_host:
@@ -138,12 +143,17 @@ def _send_message_sync(settings: EmailSettings, message: EmailMessage) -> None:
         smtp.send_message(message)
 
 
-async def send_verification_email(recipient_email: str, recipient_name: str | None, verification_url: str) -> None:
-    settings = get_email_settings()
-    message = _build_verification_email(settings, recipient_email, recipient_name, verification_url)
-
+async def _deliver_message(
+    *,
+    settings: EmailSettings,
+    message: EmailMessage,
+    recipient_email: str,
+    local_url: str,
+    local_logger,
+    failure_label: str,
+) -> None:
     if settings.delivery_mode == "local":
-        _log_local_verification_link(recipient_email, verification_url)
+        local_logger(recipient_email, local_url)
         return
 
     if settings.delivery_mode in {"auto", "resend"} and settings.resend_api_key:
@@ -153,20 +163,20 @@ async def send_verification_email(recipient_email: str, recipient_name: str | No
         except httpx.HTTPStatusError as exc:
             response_body = exc.response.text.strip()
             if settings.delivery_mode == "auto":
-                _log_local_verification_link(
+                local_logger(
                     recipient_email,
-                    verification_url,
+                    local_url,
                     reason=f"Resend rejected the message ({exc.response.status_code}): {response_body}",
                 )
                 return
             raise ValueError(
-                f"Resend rejected the verification email with status {exc.response.status_code}: {response_body}"
+                f"Resend rejected the {failure_label} with status {exc.response.status_code}: {response_body}"
             ) from exc
         except httpx.HTTPError as exc:
             if settings.delivery_mode == "auto":
-                _log_local_verification_link(
+                local_logger(
                     recipient_email,
-                    verification_url,
+                    local_url,
                     reason=f"Resend request failed: {exc}",
                 )
                 return
@@ -179,7 +189,84 @@ async def send_verification_email(recipient_email: str, recipient_name: str | No
         raise ValueError("EMAIL_DELIVERY_MODE must be one of: auto, resend, smtp, local")
 
     if not settings.smtp_host:
-        _log_local_verification_link(recipient_email, verification_url, reason="SMTP is not configured")
+        local_logger(recipient_email, local_url, reason="SMTP is not configured")
         return
 
     await asyncio.to_thread(_send_message_sync, settings, message)
+
+
+async def send_verification_email(recipient_email: str, recipient_name: str | None, verification_url: str) -> None:
+    settings = get_email_settings()
+    message = _build_verification_email(settings, recipient_email, recipient_name, verification_url)
+    await _deliver_message(
+        settings=settings,
+        message=message,
+        recipient_email=recipient_email,
+        local_url=verification_url,
+        local_logger=_log_local_verification_link,
+        failure_label="verification email",
+    )
+
+
+def _build_password_reset_email(
+    settings: EmailSettings,
+    recipient_email: str,
+    recipient_name: str | None,
+    reset_url: str,
+) -> EmailMessage:
+    greeting_name = recipient_name or recipient_email
+    message = EmailMessage()
+    message["Subject"] = f"Reset your {settings.app_name} password"
+    message["From"] = settings.email_from
+    message["To"] = recipient_email
+
+    text_body = (
+        f"Hi {greeting_name},\n\n"
+        f"We received a request to reset your {settings.app_name} password. Open the link below to choose a new one:\n\n"
+        f"{reset_url}\n\n"
+        "If you did not request a password reset, you can ignore this email."
+    )
+    html_body = f"""
+    <html>
+      <body style="font-family: Arial, sans-serif; background: #071018; color: #d8e4ef; padding: 24px;">
+        <div style="max-width: 560px; margin: 0 auto; background: #0d1117; border: 1px solid #1e2a35; border-radius: 18px; padding: 32px;">
+          <p style="margin: 0 0 8px; font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: #6f8598;">Password Reset</p>
+          <h1 style="margin: 0 0 16px; font-size: 28px; color: #f3f7fb;">Reset your password</h1>
+          <p style="margin: 0 0 16px; font-size: 15px; line-height: 1.7;">
+            Hi {greeting_name},
+          </p>
+          <p style="margin: 0 0 24px; font-size: 15px; line-height: 1.7;">
+            We received a request to reset your {settings.app_name} password. Use the button below to choose a new password.
+          </p>
+          <p style="margin: 0 0 28px;">
+            <a href="{reset_url}" style="display: inline-block; background: linear-gradient(135deg, #00d2ff, #4fc3f7); color: #071018; text-decoration: none; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; font-size: 12px; padding: 14px 22px; border-radius: 999px;">Reset password</a>
+          </p>
+          <p style="margin: 0 0 12px; font-size: 13px; line-height: 1.7; color: #9cb3c4;">
+            If the button does not work, copy and paste this URL into your browser:
+          </p>
+          <p style="margin: 0 0 24px; font-size: 13px; line-height: 1.7; word-break: break-all; color: #7fe7ff;">
+            {reset_url}
+          </p>
+          <p style="margin: 0; font-size: 13px; line-height: 1.7; color: #6f8598;">
+            If you did not request a password reset, you can safely ignore this email.
+          </p>
+        </div>
+      </body>
+    </html>
+    """
+    message.set_content(text_body)
+    message.add_alternative(html_body, subtype="html")
+    return message
+
+
+async def send_password_reset_email(recipient_email: str, recipient_name: str | None, reset_url: str) -> None:
+    settings = get_email_settings()
+    message = _build_password_reset_email(settings, recipient_email, recipient_name, reset_url)
+    await _deliver_message(
+        settings=settings,
+        message=message,
+        recipient_email=recipient_email,
+        local_url=reset_url,
+        local_logger=_log_local_password_reset_link,
+        failure_label="password reset email",
+    )
