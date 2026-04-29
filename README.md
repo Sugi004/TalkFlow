@@ -152,6 +152,12 @@ This project is not end-to-end encrypted today. The backend decrypts message con
 - `POST /ai/smart-reply`
 - `POST /ai/translate`
 
+![TalkFlow ai chat overview](docs/images/ai-chat-overview.png)
+
+![TalkFlow ai chat suggest panel](docs/images/ai-suggest-panel.png)
+
+![TalkFlow mobile](docs/images/ai-summary-panel.png)
+
 ### WebSockets
 
 - `WS /ws/{conversation_id}?token=...`
@@ -276,33 +282,33 @@ For local development, the backend can be configured to log the verification lin
 
 ### Backend
 
-| Variable                      | Required    | Purpose                                         |
-| ----------------------------- | ----------- | ----------------------------------------------- |
-| `DATABASE_URL`                | Yes         | SQLAlchemy async database connection string     |
-| `IS_PRODUCTION`               | No          | Enables production-oriented DB SSL handling     |
-| `SECRET_KEY`                  | Yes         | JWT signing secret and fallback encryption seed |
-| `ALGORITHM`                   | Yes         | JWT signing algorithm, typically `HS256`        |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | No          | JWT expiration window                           |
-| `MESSAGE_ENCRYPTION_KEY`      | Recommended | Dedicated key for message encryption at rest    |
-| `FRONTEND_URL`                | Recommended | Frontend origin used for CORS and verification redirects |
-| `BACKEND_PUBLIC_URL`          | Recommended | Public backend base URL used in verification email links |
+| Variable                      | Required    | Purpose                                                    |
+| ----------------------------- | ----------- | ---------------------------------------------------------- |
+| `DATABASE_URL`                | Yes         | SQLAlchemy async database connection string                |
+| `IS_PRODUCTION`               | No          | Enables production-oriented DB SSL handling                |
+| `SECRET_KEY`                  | Yes         | JWT signing secret and fallback encryption seed            |
+| `ALGORITHM`                   | Yes         | JWT signing algorithm, typically `HS256`                   |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | No          | JWT expiration window                                      |
+| `MESSAGE_ENCRYPTION_KEY`      | Recommended | Dedicated key for message encryption at rest               |
+| `FRONTEND_URL`                | Recommended | Frontend origin used for CORS and verification redirects   |
+| `BACKEND_PUBLIC_URL`          | Recommended | Public backend base URL used in verification email links   |
 | `EMAIL_DELIVERY_MODE`         | No          | Email transport mode: `resend`, `smtp`, `auto`, or `local` |
-| `RESEND_API_KEY`              | Recommended | Resend API key for verification email delivery  |
-| `EMAIL_FROM`                  | Recommended | Verified sender address used for verification emails |
-| `SMTP_HOST`                   | No          | SMTP host when using SMTP mode or fallback      |
-| `SMTP_PORT`                   | No          | SMTP port when using SMTP mode or fallback      |
-| `SMTP_USER`                   | No          | SMTP username                                   |
-| `SMTP_PASSWORD`               | No          | SMTP password                                   |
-| `SMTP_USE_SSL`                | No          | Enables implicit SSL SMTP connections           |
-| `SMTP_USE_STARTTLS`           | No          | Enables STARTTLS SMTP upgrade                   |
-| `REDIS_HOST`                  | No          | Redis host                                      |
-| `REDIS_PORT`                  | No          | Redis port                                      |
-| `REDIS_PASSWORD`              | No          | Redis password                                  |
-| `AWS_ACCESS_KEY_ID`           | For uploads | S3 credentials                                  |
-| `AWS_SECRET_ACCESS_KEY`       | For uploads | S3 credentials                                  |
-| `AWS_REGION`                  | For uploads | S3 region                                       |
-| `S3_BUCKET`                   | For uploads | Upload bucket name                              |
-| `GOOGLE_API_KEY`              | For AI      | Gemini API access                               |
+| `RESEND_API_KEY`              | Recommended | Resend API key for verification email delivery             |
+| `EMAIL_FROM`                  | Recommended | Verified sender address used for verification emails       |
+| `SMTP_HOST`                   | No          | SMTP host when using SMTP mode or fallback                 |
+| `SMTP_PORT`                   | No          | SMTP port when using SMTP mode or fallback                 |
+| `SMTP_USER`                   | No          | SMTP username                                              |
+| `SMTP_PASSWORD`               | No          | SMTP password                                              |
+| `SMTP_USE_SSL`                | No          | Enables implicit SSL SMTP connections                      |
+| `SMTP_USE_STARTTLS`           | No          | Enables STARTTLS SMTP upgrade                              |
+| `REDIS_HOST`                  | No          | Redis host                                                 |
+| `REDIS_PORT`                  | No          | Redis port                                                 |
+| `REDIS_PASSWORD`              | No          | Redis password                                             |
+| `AWS_ACCESS_KEY_ID`           | For uploads | S3 credentials                                             |
+| `AWS_SECRET_ACCESS_KEY`       | For uploads | S3 credentials                                             |
+| `AWS_REGION`                  | For uploads | S3 region                                                  |
+| `S3_BUCKET`                   | For uploads | Upload bucket name                                         |
+| `GOOGLE_API_KEY`              | For AI      | Gemini API access                                          |
 
 ### Frontend
 
