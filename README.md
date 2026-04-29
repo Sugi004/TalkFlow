@@ -251,6 +251,17 @@ npm run dev
 - Backend docs: `http://localhost:8000/docs`
 - Backend OpenAPI: `http://localhost:8000/openapi.json`
 
+## Collaboration Setup
+
+If multiple people are contributing to TalkFlow:
+
+1. Copy the env templates instead of sharing live config:
+   - `cp backend/.env.example backend/.env`
+   - `cp frontend/.env.example frontend/.env.local`
+2. Keep all real secrets local or in deployment secret managers.
+3. Run backend tests plus frontend lint/build before opening a pull request.
+4. Read [collaborate.md](./collaborate.md) for the full branch, review, and secret-handling workflow.
+
 ## Authentication And Email Verification Flow
 
 1. The frontend fetches `GET /auth/public-key` and encrypts the password before sending register or login requests.
@@ -335,8 +346,8 @@ Coverage areas currently include:
 
 ## Suggested Next Improvements
 
-1. Add a pinned `backend/.env.example` and `frontend/.env.example`
-2. Add CI for backend tests and frontend lint/build
-3. Move AI prompt building and provider integration behind a dedicated service layer
-4. Add more API tests around uploads, AI failures, and unread count edge cases
-5. Add migration tooling instead of relying on `create_all` at startup
+1. Add CI for backend tests and frontend lint/build
+2. Move AI prompt building and provider integration behind a dedicated service layer
+3. Add more API tests around uploads, AI failures, and unread count edge cases
+4. Add migration tooling instead of relying on `create_all` at startup
+5. Add branch protection and automated preview deployments for safer collaboration
