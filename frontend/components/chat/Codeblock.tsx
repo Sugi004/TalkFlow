@@ -115,7 +115,6 @@ export default function CodeBlock({ code, language = "" }: CodeBlockProps) {
 
     useEffect(() => {
         let cancelled = false;
-        setHighlighted("");
 
         codeToHtml(cleanCode, {
             lang: shikiLang,
